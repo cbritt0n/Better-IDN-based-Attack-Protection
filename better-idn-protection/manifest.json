@@ -1,0 +1,40 @@
+{
+    "manifest_version": 2,
+    "name": "Better URL Protection",
+    "version": "1.0",
+    "description": "This extension provides better protection against IDN based attacks",
+    "icons": {
+        "128": "icon128.png",
+        "32": "icon32.png",
+        "48": "icon.png"
+    },
+    "browser_action": {
+            "default_icon": {
+            "16": "icon16.png",
+            "32": "icon32.png"
+        },
+        "default_popup": "popup.html"
+    },
+    "background": {
+      "scripts": ["background.js"]
+    },
+    "content_scripts":[{
+      "matches": ["<all_urls>"],
+      "js": ["app.js"],
+      "run_at": "document_end"
+    }],
+    "permissions":[
+      "tabs",
+      "notifications",
+      "activeTab",
+      "background",
+      "bookmarks",
+      "browsingData",
+      "cookies",
+      "webRequest",
+      "webNavigation",
+      "webRequestBlocking",
+      "http://*/*",
+      "https://*/*"
+    ]
+}
