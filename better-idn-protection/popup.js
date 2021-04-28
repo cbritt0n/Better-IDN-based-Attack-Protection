@@ -5,12 +5,12 @@
   }
 });*/
 
-function updatePopup() {
+/*function updatePopup() {
   chrome.storage.sync.get(['url'], function(data){
     document.getElementById("url").innerText = data.url;
   });
 }
-document.addEventListener('DOMContentLoaded', updatePopup);
+document.addEventListener('DOMContentLoaded', updatePopup);*/
 
 /*
 chrome.tabs.query({active: true, currentWindow: true}, ([tab]) => {

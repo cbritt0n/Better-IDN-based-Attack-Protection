@@ -16,12 +16,13 @@
         "default_popup": "popup.html"
     },
     "background": {
-      "scripts": ["background.js"]
+      "scripts": ["bg.js"],
+      "persistent": false
     },
     "content_scripts":[{
       "matches": ["<all_urls>"],
       "js": ["app.js"],
-      "run_at": "document_end"
+      "run_at": "document_start"
     }],
     "permissions":[
       "tabs",
@@ -31,7 +32,6 @@
       "bookmarks",
       "browsingData",
       "cookies",
-      "webRequest",
       "webNavigation",
       "webRequestBlocking",
       "http://*/*",
