@@ -14,3 +14,6 @@ Currently, this project currently supports 65,533 of the most common Unicode cha
 4. Click "Load Unpacked".
 5. Use the file browser to browse to the better-idn-protection directory and click "Select".
 6. Ensure the extension is enabled.
+
+# Testing
+I have registered a test site at https://xn--christinbritton-nlb.weebly.com/. With the extension enabled and Google Chrome opened, navigate to that site. A popup and notification should display warning you of the site's possible malicious intent. 
