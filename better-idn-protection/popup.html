@@ -2,14 +2,149 @@
 <html>
     <head>
         <title>Warning! A recently visited URL might pose a threat.</title>
-        <script src="app.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                width: 350px;
+                margin: 0;
+                padding: 0;
+                background: #fffbe7;
+            }
+            #status {
+                padding: 20px;
+            }
+            .highlight {
+                color: #b30000;
+                font-weight: bold;
+                background: #ffe0e0;
+                padding: 2px 4px;
+                border-radius: 3px;
+            }
+        </style>
+        <script>
+            // Display suspicious character and block if sent via message
+            let currentDomain = '';
+            function escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/\"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            function setStatus(text) {
+                // text may contain characters but do not use innerHTML with untrusted content
+                document.getElementById('suspicious').textContent = text;
+            }
+
+            chrome.runtime.onMessage.addListener((msg) => {
+                if (msg.char && msg.block) {
+                    currentDomain = msg.url || '';
+                    // show a safe, simple text message and highlight using CSS to avoid HTML injection
+                    setStatus(`Suspicious character: ${msg.char} (Unicode block: ${msg.block})`);
+                    document.getElementById('domain').textContent = currentDomain;
+                    updateWhitelistButtons();
+                }
+            });
+
+            function updateWhitelistButtons() {
+                chrome.storage.sync.get(['whitelist'], (res) => {
+                    const wl = (res && res.whitelist) || [];
+                    const addBtn = document.getElementById('add-wl');
+                    const removeBtn = document.getElementById('remove-wl');
+                    if (!currentDomain) { addBtn.disabled = true; removeBtn.disabled = true; return; }
+                    if (wl.includes(currentDomain)) {
+                        addBtn.disabled = true;
+                        removeBtn.disabled = false;
+                    } else {
+                        addBtn.disabled = false;
+                        removeBtn.disabled = true;
+                    }
+                });
+            }
+
+            function addToWhitelist() {
+                if (!currentDomain) return;
+                chrome.storage.sync.get(['whitelist'], (res) => {
+                    const wl = (res && res.whitelist) || [];
+                    if (!wl.includes(currentDomain)) wl.push(currentDomain);
+                    chrome.storage.sync.set({ whitelist: wl }, () => updateWhitelistButtons());
+                });
+            }
+
+            function removeFromWhitelist() {
+                if (!currentDomain) return;
+                chrome.storage.sync.get(['whitelist'], (res) => {
+                    let wl = (res && res.whitelist) || [];
+                    wl = wl.filter((d) => d !== currentDomain);
+                    chrome.storage.sync.set({ whitelist: wl }, () => updateWhitelistButtons());
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                document.getElementById('add-wl').addEventListener('click', addToWhitelist);
+                document.getElementById('remove-wl').addEventListener('click', removeFromWhitelist);
+                document.getElementById('clear-wl').addEventListener('click', () => {
+                    chrome.storage.sync.set({ whitelist: [] }, () => renderWhitelist());
+                });
+                updateWhitelistButtons();
+                renderWhitelist();
+            });
+
+            function renderWhitelist() {
+                chrome.storage.sync.get(['whitelist'], (res) => {
+                    const wl = (res && res.whitelist) || [];
+                    const ul = document.getElementById('whitelist-list');
+                    ul.innerHTML = '';
+                    if (wl.length === 0) {
+                        const li = document.createElement('li');
+                        li.textContent = '(none)';
+                        ul.appendChild(li);
+                        return;
+                    }
+                    wl.forEach((d) => {
+                        const li = document.createElement('li');
+                        const txt = document.createElement('span');
+                        txt.textContent = d;
+                        const btn = document.createElement('button');
+                        btn.textContent = 'Remove';
+                        btn.style.marginLeft = '8px';
+                        btn.addEventListener('click', () => {
+                            chrome.storage.sync.get(['whitelist'], (res2) => {
+                                let wl2 = (res2 && res2.whitelist) || [];
+                                wl2 = wl2.filter(x => x !== d);
+                                chrome.storage.sync.set({ whitelist: wl2 }, () => renderWhitelist());
+                            });
+                        });
+                        li.appendChild(txt);
+                        li.appendChild(btn);
+                        ul.appendChild(li);
+                    });
+                });
+            }
+        </script>
     </head>
     <body>
-      <style="width:160px;height:90px;">
         <div id="status">
             <h2>Warning! A recently visited URL might pose a threat.</h2>
-            <h4>The website that you are trying to access could potentially be trying to produce an IDN-based phishing attack.</h4>
-            <p>For more informaton about this type of phishing attack, please view <a href="https://blogs.akamai.com/sitr/2020/05/watch-your-step-the-prevalence-of-idn-homograph-attacks.html">this site</a>.</p>
+            <h4>The website you are trying to access could be attempting an IDN-based phishing attack.</h4>
+            <div id="suspicious"></div>
+            <p>Current domain: <span id="domain"></span></p>
+            <p>
+                <button id="add-wl">Add domain to whitelist</button>
+                <button id="remove-wl">Remove from whitelist</button>
+            </p>
+            <hr />
+            <h4>Whitelist manager</h4>
+            <div>
+                <p>Whitelisted domains:</p>
+                <ul id="whitelist-list" style="max-height:120px;overflow:auto;padding-left:18px;"></ul>
+                <p>
+                    <button id="clear-wl">Clear all whitelist</button>
+                </p>
+            </div>
+            <p>For more information about this type of phishing attack, please view <a href="https://blogs.akamai.com/sitr/2020/05/watch-your-step-the-prevalence-of-idn-homograph-attacks.html" target="_blank">this site</a>.</p>
         </div>
     </body>
 </html>

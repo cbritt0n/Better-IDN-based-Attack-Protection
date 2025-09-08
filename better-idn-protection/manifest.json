@@ -1,40 +1,37 @@
 {
-    "manifest_version": 2,
-    "name": "Better URL Protection",
-    "version": "1.0",
-    "description": "This extension provides better protection against IDN based attacks",
-    "icons": {
-        "128": "icon128.png",
-        "32": "icon32.png",
-        "48": "icon.png"
+  "manifest_version": 3,
+  "name": "Better URL Protection",
+  "version": "2.0",
+  "description": "This extension provides better protection against IDN based attacks.",
+  "icons": {
+    "128": "icon128.png",
+    "32": "icon32.png",
+    "48": "icon.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png"
     },
-    "browser_action": {
-            "default_icon": {
-            "16": "icon16.png",
-            "32": "icon32.png"
-        },
-        "default_popup": "popup.html"
-    },
-    "background": {
-      "scripts": ["bg.js"],
-      "persistent": false
-    },
-    "content_scripts":[{
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "bg.js"
+  },
+  "content_scripts": [
+    {
       "matches": ["<all_urls>"],
       "js": ["app.js"],
       "run_at": "document_start"
-    }],
-    "permissions":[
-      "tabs",
-      "notifications",
-      "activeTab",
-      "background",
-      "bookmarks",
-      "browsingData",
-      "cookies",
-      "webNavigation",
-      "webRequestBlocking",
-      "http://*/*",
-      "https://*/*"
-    ]
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
 }

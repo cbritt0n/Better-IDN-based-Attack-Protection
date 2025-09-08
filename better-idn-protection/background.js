@@ -1,5 +1,5 @@
 
-
+/* eslint-disable */
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.method == "getURL"){
     sendResponse({url: getURL()})
