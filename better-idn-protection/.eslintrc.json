@@ -5,7 +5,8 @@
     "node": true
   },
   "globals": {
-    "chrome": "readonly"
+  "chrome": "readonly",
+  "punycode": "readonly"
   },
   "extends": "eslint:recommended",
   "parserOptions": {

@@ -8,6 +8,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.tabs.sendMessage(tabs[0].id, { url: tabs[0].url });
       }
     });
+  } else if (message === 'get-active-tab') {
+    // Return the URL of the most relevant active tab (ignore extension pages)
+    chrome.tabs.query({ lastFocusedWindow: true }, (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        sendResponse({ url: null });
+        return;
+      }
+      // find first tab in that window with http/https
+      const tab = tabs.find(t => t && t.url && /^https?:\/\//.test(t.url));
+      if (tab && tab.url) sendResponse({ url: tab.url });
+      else sendResponse({ url: null });
+    });
+    return true; // indicate async sendResponse
   } else if (message.type === "create-alert") {
     chrome.notifications.create({
       type: "basic",

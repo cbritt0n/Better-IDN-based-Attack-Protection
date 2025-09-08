@@ -21,7 +21,8 @@
                 border-radius: 3px;
             }
         </style>
-        <script>
+    <script src="punycode.js"></script>
+    <script>
             // Display suspicious character and block if sent via message
             let currentDomain = '';
             function escapeHtml(unsafe) {
@@ -54,7 +55,9 @@
                     const addBtn = document.getElementById('add-wl');
                     const removeBtn = document.getElementById('remove-wl');
                     if (!currentDomain) { addBtn.disabled = true; removeBtn.disabled = true; return; }
-                    if (wl.includes(currentDomain)) {
+                    // Normalize currentDomain to ASCII (punycode) for storage/comparison
+                    const asciiForm = (typeof punycode !== 'undefined') ? punycode.ToASCII(currentDomain) : currentDomain;
+                    if (wl.includes(asciiForm) || wl.includes(currentDomain) || wl.includes((typeof punycode !== 'undefined') ? punycode.ToUnicode(currentDomain) : currentDomain)) {
                         addBtn.disabled = true;
                         removeBtn.disabled = false;
                     } else {
@@ -66,18 +69,21 @@
 
             function addToWhitelist() {
                 if (!currentDomain) return;
+                // Store ASCII (punycode) canonical form to avoid ambiguity
+                const toStore = (typeof punycode !== 'undefined') ? punycode.ToASCII(currentDomain) : currentDomain;
                 chrome.storage.sync.get(['whitelist'], (res) => {
                     const wl = (res && res.whitelist) || [];
-                    if (!wl.includes(currentDomain)) wl.push(currentDomain);
+                    if (!wl.includes(toStore)) wl.push(toStore);
                     chrome.storage.sync.set({ whitelist: wl }, () => updateWhitelistButtons());
                 });
             }
 
             function removeFromWhitelist() {
                 if (!currentDomain) return;
+                const asciiForm = (typeof punycode !== 'undefined') ? punycode.ToASCII(currentDomain) : currentDomain;
                 chrome.storage.sync.get(['whitelist'], (res) => {
                     let wl = (res && res.whitelist) || [];
-                    wl = wl.filter((d) => d !== currentDomain);
+                    wl = wl.filter((d) => d !== asciiForm && d !== currentDomain && d !== ((typeof punycode !== 'undefined') ? punycode.ToUnicode(currentDomain) : currentDomain));
                     chrome.storage.sync.set({ whitelist: wl }, () => updateWhitelistButtons());
                 });
             }
@@ -88,23 +94,74 @@
                 document.getElementById('clear-wl').addEventListener('click', () => {
                     chrome.storage.sync.set({ whitelist: [] }, () => renderWhitelist());
                 });
-                updateWhitelistButtons();
-                renderWhitelist();
+                // Migrate existing whitelist entries to canonical ASCII (punycode) form
+                try {
+                    chrome.storage.sync.get(['whitelist'], (res) => {
+                        const wl = (res && res.whitelist) || [];
+                        if (!wl || wl.length === 0) {
+                            updateWhitelistButtons();
+                            renderWhitelist();
+                            return;
+                        }
+                        const migrated = [];
+                        for (const d of wl) {
+                            try {
+                                const unicode = (typeof punycode !== 'undefined') ? punycode.ToUnicode(d) : d;
+                                const ascii = (typeof punycode !== 'undefined') ? punycode.ToASCII(unicode) : unicode;
+                                if (!migrated.includes(ascii)) migrated.push(ascii);
+                            } catch (e) {
+                                if (!migrated.includes(d)) migrated.push(d);
+                            }
+                        }
+                        // If migration changed anything, persist
+                        const changed = migrated.length !== wl.length || migrated.some((v, i) => v !== wl[i]);
+                        if (changed) {
+                            chrome.storage.sync.set({ whitelist: migrated }, () => {
+                                updateWhitelistButtons();
+                                renderWhitelist();
+                            });
+                        } else {
+                            updateWhitelistButtons();
+                            renderWhitelist();
+                        }
+                    });
+                } catch (e) {
+                    updateWhitelistButtons();
+                    renderWhitelist();
+                }
             });
 
-            // Try to populate currentDomain from the active tab when popup opens
+            // Populate currentDomain from background (preferred) or from active tab
             (function populateFromActiveTab() {
                 try {
-                    chrome.tabs && chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                        if (tabs && tabs[0] && tabs[0].url) {
+                    chrome.runtime.sendMessage('get-active-tab', (res) => {
+                        if (res && res.url) {
                             try {
-                                const u = new URL(tabs[0].url);
+                                const u = new URL(res.url);
                                 currentDomain = u.hostname;
                                 document.getElementById('domain').textContent = currentDomain;
                                 updateWhitelistButtons();
+                                return;
                             } catch (e) {
-                                // ignore
+                                // fallthrough
                             }
+                        }
+                        // fallback to tabs API
+                        try {
+                            chrome.tabs && chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                                if (tabs && tabs[0] && tabs[0].url) {
+                                    try {
+                                        const u = new URL(tabs[0].url);
+                                        currentDomain = u.hostname;
+                                        document.getElementById('domain').textContent = currentDomain;
+                                        updateWhitelistButtons();
+                                    } catch (e) {
+                                        // ignore
+                                    }
+                                }
+                            });
+                        } catch (e) {
+                            // ignore
                         }
                     });
                 } catch (e) {
@@ -126,14 +183,16 @@
                     wl.forEach((d) => {
                         const li = document.createElement('li');
                         const txt = document.createElement('span');
-                        txt.textContent = d;
+            // display Unicode form when possible
+            const display = (typeof punycode !== 'undefined') ? punycode.ToUnicode(d) : d;
+            txt.textContent = display;
                         const btn = document.createElement('button');
                         btn.textContent = 'Remove';
                         btn.style.marginLeft = '8px';
                         btn.addEventListener('click', () => {
                             chrome.storage.sync.get(['whitelist'], (res2) => {
                                 let wl2 = (res2 && res2.whitelist) || [];
-                                wl2 = wl2.filter(x => x !== d);
+                wl2 = wl2.filter(x => x !== d);
                                 chrome.storage.sync.set({ whitelist: wl2 }, () => renderWhitelist());
                             });
                         });
