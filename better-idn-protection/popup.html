@@ -92,6 +92,26 @@
                 renderWhitelist();
             });
 
+            // Try to populate currentDomain from the active tab when popup opens
+            (function populateFromActiveTab() {
+                try {
+                    chrome.tabs && chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                        if (tabs && tabs[0] && tabs[0].url) {
+                            try {
+                                const u = new URL(tabs[0].url);
+                                currentDomain = u.hostname;
+                                document.getElementById('domain').textContent = currentDomain;
+                                updateWhitelistButtons();
+                            } catch (e) {
+                                // ignore
+                            }
+                        }
+                    });
+                } catch (e) {
+                    // not available in some contexts
+                }
+            })();
+
             function renderWhitelist() {
                 chrome.storage.sync.get(['whitelist'], (res) => {
                     const wl = (res && res.whitelist) || [];

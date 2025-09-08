@@ -155,6 +155,29 @@ function hasMixedScripts(domain) {
   return { mixed: false };
 }
 
+function isWhitelisted(punnyDomain, wl) {
+  if (!Array.isArray(wl)) return false;
+  // direct match
+  if (wl.includes(punnyDomain)) return true;
+  // ascii form match
+  try {
+    const ascii = punycode.ToASCII(punnyDomain);
+    if (wl.includes(ascii)) return true;
+  } catch (e) {
+    // ignore
+  }
+  // entries in whitelist may be punycode (xn--) - convert them and compare
+  for (const w of wl) {
+    try {
+      const u = punycode.ToUnicode(w);
+      if (u === punnyDomain) return true;
+    } catch (e) {
+      // ignore
+    }
+  }
+  return false;
+}
+
 function checkURL(url) {
   let punnyDomain;
   if (url.startsWith('https://') || url.startsWith('http://')) {
@@ -167,7 +190,7 @@ function checkURL(url) {
   try {
     chrome.storage && chrome.storage.sync && chrome.storage.sync.get(['whitelist'], (res) => {
       const wl = (res && res.whitelist) || [];
-      if (wl.includes(punnyDomain)) return; // whitelisted
+      if (isWhitelisted(punnyDomain, wl)) return; // whitelisted
       const { mixed, block, char } = hasMixedScripts(punnyDomain);
       if (mixed) {
         chrome.runtime.sendMessage({
