@@ -1,19 +1,71 @@
-# Better-IDN-based-Attack-Protection
-This Chrome Extension will provide better protections against IDN-based Phishing attacks. 
+# Better IDN-based Attack Protection
 
-The goal with this project is to mimic Chrome's current protections against IDN-based attacks and combine those protections with the recommended protections listed in https://www.usenix.org/system/files/sec21summer_hu-hang.pdf.
+Lightweight Chrome extension to detect mixed-script IDN domains that may be used for homograph/phishing attacks.
 
-This project is being used as a final project in the Spring 2021 CSCI 8240: Software Security Cyber Forensics under the advisement of Dr. Kyu Hyung Lee in the Department of Computer Science (https://cs.uga.edu/) at the University of Georgia (https://www.uga.edu/). 
+Features
+- Detects mixed Unicode script usage in visited hostnames.
+- Converts punycode domains to Unicode before analysis.
+- User-managed whitelist via popup (stored in `chrome.storage.sync`).
 
-Currently, this project currently supports 65,533 of the most common Unicode characters contained in 88 of the most common Unicode Character Ranges. 
+Quick start (development)
 
-# How to use
-1. Clone or download repository.
-2. Open Google Chrome.
-3. Navigate to chrome://extensions/.
-4. Click "Load Unpacked".
-5. Use the file browser to browse to the better-idn-protection directory and click "Select".
-6. Ensure the extension is enabled.
+1. Install dev dependencies (creates package-lock.json):
 
-# Testing
-I have registered a test site at https://xn--christinbritton-nlb.weebly.com/. With the extension enabled and Google Chrome opened, navigate to that site. A popup and notification should display warning you of the site's possible malicious intent. 
+```bash
+npm install
+```
+
+2. Run unit-like tests (Node):
+
+```bash
+npm test
+```
+
+3. Lint the project (ESLint):
+
+```bash
+npm run lint
+```
+
+4. Load unpacked extension into Chrome/Edge:
+
+- Open `chrome://extensions`
+- Enable Developer mode
+- Click "Load unpacked" and select this folder (`better-idn-protection`).
+
+Testing (your test site)
+
+I have a registered test site you can use to validate behavior. With the extension enabled and Chrome open, navigate to:
+
+```
+https://xn--christinbritton-nlb.weebly.com/
+```
+
+You should see a popup and notification warning about the site's potential IDN-based homograph intent (unless you have whitelisted the domain).
+
+Packaging for release
+
+- Locally: create a packaged zip suitable for upload or release:
+
+```bash
+npm run pack
+```
+
+- GitHub: create a tag like `v1.0.0` and push; the provided release workflow will create a zip artifact for that tag.
+
+CI & dependency updates
+
+- Continuous Integration runs lint then tests via GitHub Actions (`.github/workflows/ci.yml`).
+- Dependabot is configured to open PRs for npm and GitHub Actions updates (`.github/dependabot.yml`).
+
+Contributing
+
+- See `CONTRIBUTING.md` for contribution guidelines and PR process.
+- Use the provided issue and PR templates.
+
+Security notes
+
+- Popup output is sanitized and uses `textContent` to avoid DOM injection.
+- Whitelist is stored using Chrome's `storage.sync` and applied before creating alerts.
+
+License: MIT
