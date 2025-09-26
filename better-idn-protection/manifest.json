@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better URL Protection",
-  "version": "2.0",
+  "version": "1.0.0",
   "description": "This extension provides better protection against IDN based attacks.",
   "icons": {
     "128": "src/assets/icon128.png",
