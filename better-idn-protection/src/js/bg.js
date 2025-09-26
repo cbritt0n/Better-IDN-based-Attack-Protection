@@ -277,16 +277,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }, (_response) => {
             if (chrome.runtime.lastError) {
               // Content script might not be loaded, directly analyze the URL
+              console.log('Content script not available, doing direct analysis');
               const analysisUrl = message.url || activeTab.url;
               analyzeUrlDirectly(analysisUrl);
               sendResponse({ success: true, method: 'direct' });
             } else {
-              // Content script responded - still send analysis complete
-              chrome.runtime.sendMessage({
-                type: 'analysis-complete',
-                url: message.url || activeTab.url,
-                safe: true
-              });
+              // Content script responded - it already did the analysis
+              console.log('Content script completed analysis');
               sendResponse({ success: true, method: 'content-script' });
             }
           });
@@ -307,6 +304,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Direct URL analysis when content script is not available
 async function analyzeUrlDirectly(url) {
+  console.log('Direct URL analysis for:', url);
+  
   // This is a simplified version of the checkURL logic from app.js
   const educationalDomains = [
     'wikipedia.org',
@@ -331,31 +330,71 @@ async function analyzeUrlDirectly(url) {
   // Check if it's an educational domain
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
+      console.log('Educational domain detected:', domain);
       // Send safe notification for educational domains
       chrome.runtime.sendMessage({
         type: 'create-safe-notification',
         url: domain
       });
-      // Also notify popup directly
-      chrome.runtime.sendMessage({
-        type: 'analysis-complete',
-        url: domain,
-        safe: true
-      });
       return;
     }
   }
 
-  // For other domains, assume safe if no mixed scripts detected
-  // Note: This is a simplified check - full analysis would require Unicode blocks
-  chrome.runtime.sendMessage({
-    type: 'create-safe-notification',
-    url: domain
-  });
-  // Also notify popup directly
-  chrome.runtime.sendMessage({
-    type: 'analysis-complete',
-    url: domain,
-    safe: true
-  });
+  // For other domains, do basic mixed script detection
+  // This is a simplified check without full Unicode blocks
+  const hasMixed = checkForMixedScriptsBasic(domain);
+  
+  if (hasMixed.mixed) {
+    console.log('Mixed scripts detected:', hasMixed);
+    chrome.runtime.sendMessage({
+      type: 'create-alert',
+      url: domain,
+      char: hasMixed.char,
+      block: hasMixed.block
+    });
+  } else {
+    console.log('No mixed scripts detected for:', domain);
+    chrome.runtime.sendMessage({
+      type: 'create-safe-notification',
+      url: domain
+    });
+  }
+}
+
+// Basic mixed script detection for background script
+function checkForMixedScriptsBasic(domain) {
+  const latinPattern = /[a-zA-Z]/;
+  const cyrillicPattern = /[а-яё]/i;
+  const greekPattern = /[α-ωΑ-Ω]/;
+  
+  let hasLatin = false;
+  let hasCyrillic = false;
+  let hasGreek = false;
+  let suspiciousChar = '';
+  
+  for (const char of domain) {
+    if (char === '-' || char === '.') continue;
+    
+    if (latinPattern.test(char)) {
+      hasLatin = true;
+    } else if (cyrillicPattern.test(char)) {
+      hasCyrillic = true;
+      suspiciousChar = char;
+    } else if (greekPattern.test(char)) {
+      hasGreek = true;
+      suspiciousChar = char;
+    }
+    
+    // Check for mixed scripts
+    const mixedCount = [hasLatin, hasCyrillic, hasGreek].filter(Boolean).length;
+    if (mixedCount > 1) {
+      return {
+        mixed: true,
+        char: suspiciousChar || char,
+        block: hasCyrillic ? 'Cyrillic' : hasGreek ? 'Greek' : 'Unknown'
+      };
+    }
+  }
+  
+  return { mixed: false };
 }

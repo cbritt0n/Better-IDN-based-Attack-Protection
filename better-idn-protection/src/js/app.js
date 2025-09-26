@@ -259,32 +259,13 @@ if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
       if (_request && _request.url) {
-        checkURL(_request.url).then(() => {
-          // Send analysis complete after URL check
-          chrome.runtime.sendMessage({
-            type: 'analysis-complete',
-            url: _request.url,
-            safe: true
-          });
-        }).catch(e => console.error('IDN Protection: Error checking URL:', e));
+        checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
       } else if (_request && _request.type === 'analyze-url') {
         // Handle manual analysis request from popup
         checkURL(_request.url).then(() => {
-          // Send analysis complete after URL check
-          chrome.runtime.sendMessage({
-            type: 'analysis-complete',
-            url: _request.url,
-            safe: true
-          });
           _sendResponse({ success: true });
         }).catch(e => {
           console.error('IDN Protection: Error checking URL:', e);
-          // Still send completion even if error
-          chrome.runtime.sendMessage({
-            type: 'analysis-complete',
-            url: _request.url,
-            safe: true
-          });
           _sendResponse({ success: false, error: e.message });
         });
         return true; // Keep message channel open for async response
@@ -297,26 +278,46 @@ if (chrome.runtime && chrome.runtime.onMessage) {
 
 async function run() {
   try {
+    console.log('IDN Protection: Content script running');
+    
+    // First try to analyze current page URL directly
+    if (window.location && window.location.href) {
+      console.log('IDN Protection: Analyzing current page:', window.location.href);
+      await checkURL(window.location.href).catch(e => console.error('IDN Protection: Error checking current URL:', e));
+    }
+    
+    // Also get URL from background script as fallback
     if (chrome.runtime && chrome.runtime.sendMessage) {
       chrome.runtime.sendMessage({ type: 'get-page-url' }, async (response) => {
         if (chrome.runtime.lastError) {
-          // Error info suppressed in production
+          console.log('IDN Protection: Error getting page URL from background:', chrome.runtime.lastError.message);
           return;
         }
-        if (response && response.url) {
+        if (response && response.url && response.url !== window.location.href) {
+          console.log('IDN Protection: Also analyzing URL from background:', response.url);
           await checkURL(response.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
         }
       });
     }
   } catch (e) {
-    // Error info suppressed in production
+    console.error('IDN Protection: Error in run function:', e);
   }
 }
 
 // punycode is provided by `punycode.js` (bundled as a content script before this file).
-// Keep DOMContentLoaded wiring for running in page contexts where needed.
+// Run immediately and also on DOMContentLoaded
 try {
-  if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', run);
+  // Run immediately if possible
+  if (typeof document !== 'undefined') {
+    console.log('IDN Protection: Content script loaded');
+    run();
+    
+    // Also run on DOMContentLoaded in case the immediate run was too early
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('IDN Protection: DOMContentLoaded - running analysis');
+      run();
+    });
+  }
 } catch (e) {
-  // ignore
+  console.error('IDN Protection: Error setting up content script:', e);
 }
