@@ -6,7 +6,7 @@
 [![Tests](https://img.shields.io/badge/tests-100%25%20passing-brightgreen)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](better-idn-protection/LICENSE)
 
-A sophisticated browser extension that provides advanced protection against IDN (Internationalized Domain Name) homograph phishing attacks. This extension detects suspicious domain names that use mixed scripts and Unicode characters to impersonate legitimate websites.
+I built a little browser extension that provides protection against IDN (Internationalized Domain Name) homograph phishing attacks. This extension detects suspicious domain names that use mixed scripts and Unicode characters to impersonate legitimate websites. Use at your own risk.
 
 ## 🛡️ Features
 
