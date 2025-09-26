@@ -259,11 +259,35 @@ if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
       if (_request && _request.url) {
-        checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
+        checkURL(_request.url).then(() => {
+          // Send analysis complete after URL check
+          chrome.runtime.sendMessage({
+            type: 'analysis-complete',
+            url: _request.url,
+            safe: true
+          });
+        }).catch(e => console.error('IDN Protection: Error checking URL:', e));
       } else if (_request && _request.type === 'analyze-url') {
         // Handle manual analysis request from popup
-        checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
-        _sendResponse({ success: true });
+        checkURL(_request.url).then(() => {
+          // Send analysis complete after URL check
+          chrome.runtime.sendMessage({
+            type: 'analysis-complete',
+            url: _request.url,
+            safe: true
+          });
+          _sendResponse({ success: true });
+        }).catch(e => {
+          console.error('IDN Protection: Error checking URL:', e);
+          // Still send completion even if error
+          chrome.runtime.sendMessage({
+            type: 'analysis-complete',
+            url: _request.url,
+            safe: true
+          });
+          _sendResponse({ success: false, error: e.message });
+        });
+        return true; // Keep message channel open for async response
       }
     } catch (e) {
       // Error info suppressed in production

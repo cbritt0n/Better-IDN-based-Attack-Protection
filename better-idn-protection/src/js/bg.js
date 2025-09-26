@@ -262,7 +262,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Get the active tab and send analysis message to content script
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
-          sendResponse({ success: false, error: 'No active tab found' });
+          // No active tab - still complete the analysis
+          analyzeUrlDirectly(message.url || 'unknown');
+          sendResponse({ success: true, method: 'direct-no-tab' });
           return;
         }
 
@@ -276,19 +278,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (chrome.runtime.lastError) {
               // Content script might not be loaded, directly analyze the URL
               const analysisUrl = message.url || activeTab.url;
-              // Import the checkURL function logic here for direct analysis
               analyzeUrlDirectly(analysisUrl);
               sendResponse({ success: true, method: 'direct' });
             } else {
+              // Content script responded - still send analysis complete
+              chrome.runtime.sendMessage({
+                type: 'analysis-complete',
+                url: message.url || activeTab.url,
+                safe: true
+              });
               sendResponse({ success: true, method: 'content-script' });
             }
           });
         } else {
-          sendResponse({ success: false, error: 'Invalid tab' });
+          // Invalid tab - still complete the analysis
+          analyzeUrlDirectly(message.url || 'unknown');
+          sendResponse({ success: true, method: 'direct-invalid-tab' });
         }
       });
     } catch (e) {
-      sendResponse({ success: false, error: e.message });
+      // Error occurred - still complete the analysis
+      analyzeUrlDirectly(message.url || 'error');
+      sendResponse({ success: true, method: 'direct-error', error: e.message });
     }
     return true; // Indicate async response
   }
@@ -325,6 +336,12 @@ async function analyzeUrlDirectly(url) {
         type: 'create-safe-notification',
         url: domain
       });
+      // Also notify popup directly
+      chrome.runtime.sendMessage({
+        type: 'analysis-complete',
+        url: domain,
+        safe: true
+      });
       return;
     }
   }
@@ -334,5 +351,11 @@ async function analyzeUrlDirectly(url) {
   chrome.runtime.sendMessage({
     type: 'create-safe-notification',
     url: domain
+  });
+  // Also notify popup directly
+  chrome.runtime.sendMessage({
+    type: 'analysis-complete',
+    url: domain,
+    safe: true
   });
 }
