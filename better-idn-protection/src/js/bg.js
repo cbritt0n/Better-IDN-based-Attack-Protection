@@ -222,8 +222,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           url: popupUrl,
           type: 'popup',
           focused: true,
-          width: 400,
-          height: 300
+          width: 600,
+          height: 500
         }, (popupWindow) => {
           if (chrome.runtime.lastError) {
             console.warn('Popup creation failed:', chrome.runtime.lastError.message);

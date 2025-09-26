@@ -1,6 +1,6 @@
 /* popup.js
-   Externalized popup script to c// Remove message listener - extension popup now gets analysis directly from content script
-// This eliminates the red/green cycling caused by competing message flowsP (no inline scripts).
+   Extension popup script for Better IDN Protection.
+   Handles domain analysis, whitelist management, and threat detection display.
 */
 
 // Production mode - debugging disabled
