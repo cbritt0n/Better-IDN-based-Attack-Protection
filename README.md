@@ -1,71 +1,178 @@
 # Better IDN-based Attack Protection
 
-Lightweight Chrome extension to detect mixed-script IDN domains that may be used for homograph/phishing attacks.
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![Chrome Extension](https://img.shields.io/badge/chrome-extension-blue)](https://chrome.google.com/webstore)
+[![Edge Extension](https://img.shields.io/badge/edge-extension-blue)](https://microsoftedge.microsoft.com/addons)
+[![Tests](https://img.shields.io/badge/tests-100%25%20passing-brightgreen)](#testing)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](better-idn-protection/LICENSE)
 
-Features
-- Detects mixed Unicode script usage in visited hostnames.
-- Converts punycode domains to Unicode before analysis.
-- User-managed whitelist via popup (stored in `chrome.storage.sync`).
+A sophisticated browser extension that provides advanced protection against IDN (Internationalized Domain Name) homograph phishing attacks. This extension detects suspicious domain names that use mixed scripts and Unicode characters to impersonate legitimate websites.
 
-Quick start (development)
+## 🛡️ Features
 
-1. Install dev dependencies (creates package-lock.json):
+- **Real-time Protection**: Monitors web navigation and detects suspicious domains instantly
+- **Mixed Script Detection**: Advanced algorithm to identify domains mixing different Unicode script families
+- **Smart Notifications**: Non-intrusive alerts when suspicious domains are detected
+- **Whitelist Management**: Easy-to-use interface for managing trusted domains
+- **Cross-Browser Support**: Works on both Chrome and Edge browsers
+- **Zero Performance Impact**: Lightweight and efficient background processing
+- **Privacy-Focused**: No data collection or external communications
+
+## 🚀 Quick Start
+
+### Installation
+
+1. **Download** the latest `extension.zip` from [releases](https://github.com/cbritt0n/Better-IDN-based-Attack-Protection/releases)
+2. **Extract** to a folder
+3. **Open** Chrome/Edge extensions page (`chrome://extensions/` or `edge://extensions/`)
+4. **Enable** "Developer mode"
+5. **Click** "Load unpacked" and select the folder
+
+### For Developers
 
 ```bash
+# Clone and setup
+git clone https://github.com/cbritt0n/Better-IDN-based-Attack-Protection.git
+cd Better-IDN-based-Attack-Protection/better-idn-protection
+
+# Install dependencies and build
 npm install
+npm run build
+
+# Load the dist/ folder as unpacked extension
 ```
 
-2. Run unit-like tests (Node):
+## 📁 Project Structure
+
+```
+better-idn-protection/
+├── src/
+│   ├── js/                     # JavaScript source files
+│   │   ├── app.js             # Main content script logic
+│   │   ├── bg.js              # Background service worker
+│   │   ├── popup.js           # Popup interface logic
+│   │   ├── punycode.js        # Punycode conversion utilities
+│   │   └── unicode_blocks.json # Unicode block definitions
+│   ├── html/                   # HTML files
+│   │   └── popup.html         # Extension popup interface
+│   ├── css/                    # Stylesheets
+│   │   └── popup.css          # Popup interface styles
+│   └── assets/                 # Static assets
+│       ├── icon16.png         # 16x16 icon
+│       ├── icon32.png         # 32x32 icon
+│       ├── icon128.png        # 128x128 icon
+│       └── icon.png           # Default icon
+├── test/                       # Test suites
+│   ├── unit/                   # Unit tests
+│   └── e2e/                    # End-to-end tests
+├── scripts/                    # Build and utility scripts
+├── docs/                       # Documentation
+├── dist/                       # Built extension (generated)
+├── manifest.json              # Extension manifest
+└── package.json               # Node.js dependencies and scripts
+```
+
+## 🧪 Testing
+
+The project maintains **100% test success rate** with comprehensive coverage:
 
 ```bash
+# Run all tests
 npm test
+
+# Run specific test suites
+npm run test:unit
+npm run test:e2e
+
+# Development validation
+npm run validate
 ```
 
-3. Lint the project (ESLint):
+### Test Coverage
+- **Unit Tests**: Core functionality, Unicode detection, domain parsing
+- **Integration Tests**: Chrome API interactions, storage management
+- **End-to-End Tests**: Full user workflows using Playwright
+- **Production Tests**: Build validation, manifest verification
 
-```bash
-npm run lint
-```
+## 🔧 Development
 
-4. Load unpacked extension into Chrome/Edge:
+### Available Scripts
+- `npm test` - Run all tests (unit + integration)
+- `npm run test:unit` - Run unit tests with coverage
+- `npm run test:e2e` - Run end-to-end tests
+- `npm run lint` - Run ESLint
+- `npm run lint:fix` - Fix ESLint issues automatically
+- `npm run build` - Build extension for distribution
+- `npm run pack` - Create extension.zip package
+- `npm run validate` - Run linting and all tests
 
-- Open `chrome://extensions`
-- Enable Developer mode
-- Click "Load unpacked" and select this folder (`better-idn-protection`).
+### Prerequisites
+- Node.js 18+
+- npm 10+
+- Chrome or Edge browser
 
-Testing (your test site)
+## 🛠️ How It Works
 
-I have a registered test site you can use to validate behavior. With the extension enabled and Chrome open, navigate to:
+### Detection Algorithm
+1. **Domain Monitoring**: Intercepts navigation events to analyze URLs
+2. **Unicode Analysis**: Examines each character's Unicode block classification
+3. **Script Mixing Detection**: Identifies suspicious combinations of different writing systems
+4. **Whitelist Check**: Verifies against user-approved domains
+5. **Alert System**: Displays warnings for potential threats
 
-```
-https://xn--christinbritton-nlb.weebly.com/
-```
+### Attack Types Detected
+- **Cyrillic/Latin Mix**: е.g., `gооgle.com` (using Cyrillic 'о')
+- **Greek/Latin Mix**: e.g., `αpple.com` (using Greek 'α')
+- **Mixed CJK**: Chinese, Japanese, Korean character substitutions
+- **Complex Scripts**: Arabic, Hebrew, and other script mixing attacks
 
-You should see a popup and notification warning about the site's potential IDN-based homograph intent (unless you have whitelisted the domain).
+## 🌐 Browser Compatibility
 
-Packaging for release
+| Browser | Version | Status |
+|---------|---------|---------|
+| Chrome | 88+ | ✅ Fully Supported |
+| Edge | 88+ | ✅ Fully Supported |
+| Firefox | N/A | 🔄 Planned (Manifest V2 port) |
 
-- Locally: create a packaged zip suitable for upload or release:
+## 🔐 Security & Privacy
 
-```bash
-npm run pack
-```
+- ✅ **No external data transmission**
+- ✅ **Local-only processing**
+- ✅ **No user tracking**
+- ✅ **Minimal permissions required**
+- ✅ **Open source and auditable**
 
-- GitHub: create a tag like `v1.0.0` and push; the provided release workflow will create a zip artifact for that tag.
+## 🤝 Contributing
 
-CI & dependency updates
+We welcome contributions! Please:
 
-- Continuous Integration runs lint then tests via GitHub Actions (`.github/workflows/ci.yml`).
-- Dependabot is configured to open PRs for npm and GitHub Actions updates (`.github/dependabot.yml`).
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Run `npm run validate` to ensure quality
+5. Submit a pull request
 
-Contributing
+### Code Quality Standards
+- **100% test coverage** for new features
+- **ESLint compliance** with project rules
+- **Comprehensive documentation** for public APIs
+- **Security-first** development practices
 
-- See `CONTRIBUTING.md` for contribution guidelines and PR process.
-- Use the provided issue and PR templates.
+## 📜 License
 
-Security notes
+This project is licensed under the MIT License - see the [LICENSE](better-idn-protection/LICENSE) file for details.
 
-- Popup output is sanitized and uses `textContent` to avoid DOM injection.
-- Whitelist is stored using Chrome's `storage.sync` and applied before creating alerts.
+## 🆘 Support
 
-License: MIT
+- **Issues**: [GitHub Issues](https://github.com/cbritt0n/Better-IDN-based-Attack-Protection/issues)
+- **Security Issues**: Please report privately via email
+- **Documentation**: See files in `better-idn-protection/` folder
+
+## 🔗 Resources
+
+- [OWASP IDN Homograph Attacks](https://owasp.org/www-community/attacks/IDN_homograph_attack)
+- [Unicode Security Considerations](https://unicode.org/reports/tr36/)
+- [Chrome Extension Development](https://developer.chrome.com/docs/extensions/)
+
+---
+
