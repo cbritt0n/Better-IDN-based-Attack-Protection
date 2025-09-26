@@ -100,6 +100,135 @@ function isWhitelisted(punnyDomain, wl) {
   return false;
 }
 
+// Analyze URL for popup without creating alert windows
+async function analyzeUrlForPopup(url) {
+  const educationalDomains = [
+    'wikipedia.org',
+    'mozilla.org',
+    'w3.org',
+    'ietf.org',
+    'unicode.org',
+    'owasp.org',
+    'github.io',
+    'github.com',
+    'docs.microsoft.com',
+    'developer.mozilla.org'
+  ];
+
+  let domain;
+  if (url.startsWith('https://') || url.startsWith('http://')) {
+    domain = extractDomain(url);
+  } else {
+    domain = url;
+  }
+
+  // Check if it's an educational domain
+  for (const eduDomain of educationalDomains) {
+    if (domain.includes(eduDomain)) {
+      // Send safe message to popup
+      chrome.runtime.sendMessage({
+        type: 'safe-notification',
+        url: domain
+      });
+      return { safe: true, reason: 'educational' };
+    }
+  }
+
+  // Ensure Unicode blocks are loaded
+  await loadUnicodeBlocks();
+
+  let punnyDomain = punycode.ToUnicode(domain);
+
+  // Check whitelist
+  return new Promise((resolve) => {
+    try {
+      if (chrome.storage && chrome.storage.sync) {
+        chrome.storage.sync.get(['whitelist'], (res) => {
+          if (chrome.runtime.lastError) {
+            // If storage access fails, do direct check without whitelist
+            const { mixed, block, char } = hasMixedScripts(punnyDomain);
+            if (mixed) {
+              chrome.runtime.sendMessage({
+                type: 'popup-alert',
+                url: punnyDomain,
+                char,
+                block
+              });
+              resolve({ safe: false, mixed: true, char, block });
+            } else {
+              chrome.runtime.sendMessage({
+                type: 'safe-notification',
+                url: punnyDomain
+              });
+              resolve({ safe: true, reason: 'no-mixed-scripts' });
+            }
+            return;
+          }
+
+          const wl = (res && res.whitelist) || [];
+          if (isWhitelisted(punnyDomain, wl)) {
+            resolve({ safe: true, reason: 'whitelisted' });
+            return;
+          }
+          
+          const { mixed, block, char } = hasMixedScripts(punnyDomain);
+          if (mixed) {
+            chrome.runtime.sendMessage({
+              type: 'popup-alert',
+              url: punnyDomain,
+              char,
+              block
+            });
+            resolve({ safe: false, mixed: true, char, block });
+          } else {
+            chrome.runtime.sendMessage({
+              type: 'safe-notification',
+              url: punnyDomain
+            });
+            resolve({ safe: true, reason: 'no-mixed-scripts' });
+          }
+        });
+      } else {
+        // If chrome.storage isn't available, do direct check
+        const { mixed, block, char } = hasMixedScripts(punnyDomain);
+        if (mixed) {
+          chrome.runtime.sendMessage({
+            type: 'popup-alert',
+            url: punnyDomain,
+            char,
+            block
+          });
+          resolve({ safe: false, mixed: true, char, block });
+        } else {
+          chrome.runtime.sendMessage({
+            type: 'safe-notification',
+            url: punnyDomain
+          });
+          resolve({ safe: true, reason: 'no-mixed-scripts' });
+        }
+      }
+    } catch (err) {
+      // If chrome.storage access throws, fallback to direct check
+      const { mixed, block, char } = hasMixedScripts(punnyDomain);
+      if (mixed) {
+        chrome.runtime.sendMessage({
+          type: 'popup-alert',
+          url: punnyDomain,
+          char,
+          block
+        });
+        resolve({ safe: false, mixed: true, char, block });
+      } else {
+        chrome.runtime.sendMessage({
+          type: 'safe-notification',
+          url: punnyDomain
+        });
+        resolve({ safe: true, reason: 'no-mixed-scripts' });
+      }
+    }
+  });
+}
+
 async function checkURL(url) {
   // Skip educational and trusted domains to avoid false positives
   const educationalDomains = [
@@ -258,12 +387,10 @@ async function checkURL(url) {
 if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
-      if (_request && _request.url) {
-        checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
-      } else if (_request && _request.type === 'analyze-url') {
-        // Handle manual analysis request from popup
-        checkURL(_request.url).then(() => {
-          _sendResponse({ success: true });
+      if (_request && _request.type === 'analyze-url') {
+        // Handle manual analysis request from popup - do analysis but send result to popup, not create alert popups
+        analyzeUrlForPopup(_request.url).then((result) => {
+          _sendResponse({ success: true, result: result });
         }).catch(e => {
           console.error('IDN Protection: Error checking URL:', e);
           _sendResponse({ success: false, error: e.message });
@@ -302,17 +429,5 @@ async function run() {
 }
 
 // punycode is provided by `punycode.js` (bundled as a content script before this file).
-// Run immediately and also on DOMContentLoaded
-try {
-  // Run immediately if possible
-  if (typeof document !== 'undefined') {
-    run();
-    
-    // Also run on DOMContentLoaded in case the immediate run was too early
-    document.addEventListener('DOMContentLoaded', () => {
-      run();
-    });
-  }
-} catch (e) {
-  // Error setting up content script
-}
+// Content script is ready but only runs analysis when requested by popup
+// This prevents automatic popup creation on every page load

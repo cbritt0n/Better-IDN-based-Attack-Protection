@@ -262,8 +262,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Get the active tab and send analysis message to content script
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
-          // No active tab - still complete the analysis
-          analyzeUrlDirectly(message.url || 'unknown');
+          // No active tab - do direct analysis for popup
+          analyzeUrlDirectlyForPopup(message.url || 'unknown');
           sendResponse({ success: true, method: 'direct-no-tab' });
           return;
         }
@@ -274,26 +274,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           chrome.tabs.sendMessage(activeTab.id, {
             type: 'analyze-url',
             url: message.url || activeTab.url
-          }, (_response) => {
+          }, (response) => {
             if (chrome.runtime.lastError) {
-              // Content script might not be loaded, directly analyze the URL
+              // Content script might not be loaded, do direct analysis for popup
               const analysisUrl = message.url || activeTab.url;
-              analyzeUrlDirectly(analysisUrl);
+              analyzeUrlDirectlyForPopup(analysisUrl);
               sendResponse({ success: true, method: 'direct' });
             } else {
-              // Content script responded - it already did the analysis
-              sendResponse({ success: true, method: 'content-script' });
+              // Content script responded and sent messages to popup
+              sendResponse({ success: true, method: 'content-script', result: response?.result });
             }
           });
         } else {
-          // Invalid tab - still complete the analysis
-          analyzeUrlDirectly(message.url || 'unknown');
+          // Invalid tab - do direct analysis for popup
+          analyzeUrlDirectlyForPopup(message.url || 'unknown');
           sendResponse({ success: true, method: 'direct-invalid-tab' });
         }
       });
     } catch (e) {
-      // Error occurred - still complete the analysis
-      analyzeUrlDirectly(message.url || 'error');
+      // Error occurred - do direct analysis for popup
+      analyzeUrlDirectlyForPopup(message.url || 'error');
       sendResponse({ success: true, method: 'direct-error', error: e.message });
     }
     return true; // Indicate async response
@@ -350,6 +350,57 @@ async function analyzeUrlDirectly(url) {
   } else {
     chrome.runtime.sendMessage({
       type: 'create-safe-notification',
+      url: domain
+    });
+  }
+}
+
+// Direct URL analysis for popup - sends messages to popup instead of creating alert windows
+async function analyzeUrlDirectlyForPopup(url) {
+  const educationalDomains = [
+    'wikipedia.org',
+    'mozilla.org',
+    'w3.org',
+    'ietf.org',
+    'unicode.org',
+    'owasp.org',
+    'github.io',
+    'github.com',
+    'docs.microsoft.com',
+    'developer.mozilla.org'
+  ];
+
+  let domain;
+  if (url.startsWith('https://') || url.startsWith('http://')) {
+    domain = extractDomainFromUrl(url);
+  } else {
+    domain = url;
+  }
+
+  // Check if it's an educational domain
+  for (const eduDomain of educationalDomains) {
+    if (domain.includes(eduDomain)) {
+      chrome.runtime.sendMessage({
+        type: 'safe-notification',
+        url: domain
+      });
+      return;
+    }
+  }
+
+  // For other domains, do basic mixed script detection
+  const hasMixed = checkForMixedScriptsBasic(domain);
+  
+  if (hasMixed.mixed) {
+    chrome.runtime.sendMessage({
+      type: 'popup-alert',
+      url: domain,
+      char: hasMixed.char,
+      block: hasMixed.block
+    });
+  } else {
+    chrome.runtime.sendMessage({
+      type: 'safe-notification',
       url: domain
     });
   }
