@@ -5,6 +5,10 @@
 // previously active page even if the popup steals focus.
 let lastActiveTabUrl = null;
 
+// Track dangerous domains and their associated popup windows
+let dangerousTabsWithPopups = new Map(); // tabId -> { domain, popupWindowId }
+let alertPopupWindows = new Set(); // Set of popup window IDs to track
+
 function updateLastActiveTab(url) {
   if (url && /^https?:\/\//.test(url)) lastActiveTabUrl = url;
 }
@@ -15,7 +19,11 @@ if (chrome.tabs && chrome.tabs.onActivated) {
     try {
       chrome.tabs.get(activeInfo.tabId, (tab) => {
         if (chrome.runtime.lastError) return; // Handle errors silently
-        if (tab && tab.url) updateLastActiveTab(tab.url);
+        if (tab && tab.url) {
+          updateLastActiveTab(tab.url);
+          // Close alert popups when switching away from dangerous tabs
+          closeAlertPopupsForInactiveTabs(activeInfo.tabId);
+        }
       });
     } catch (e) {
       // ignore
@@ -30,12 +38,117 @@ if (chrome.windows && chrome.windows.onFocusChanged) {
       if (windowId === chrome.windows.WINDOW_ID_NONE) return;
       chrome.tabs.query({ active: true, windowId }, (tabs) => {
         if (chrome.runtime.lastError) return; // Handle errors silently
-        if (tabs && tabs[0] && tabs[0].url) updateLastActiveTab(tabs[0].url);
+        if (tabs && tabs[0] && tabs[0].url) {
+          updateLastActiveTab(tabs[0].url);
+          // Close alert popups when switching window focus away from dangerous tabs
+          if (tabs[0]) {
+            closeAlertPopupsForInactiveTabs(tabs[0].id);
+          }
+        }
       });
     } catch (e) {
       // ignore
     }
   });
+}
+
+// Listen to tab updates (URL changes) to close popups when navigating away from dangerous domains
+if (chrome.tabs && chrome.tabs.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    try {
+      if (changeInfo.url && tab.url) {
+        updateLastActiveTab(tab.url);
+        // If the tab navigated to a new URL, close any associated alert popup
+        if (dangerousTabsWithPopups.has(tabId)) {
+          const tabInfo = dangerousTabsWithPopups.get(tabId);
+          const newDomain = extractDomainFromUrl(tab.url);
+          // If the domain changed, close the popup
+          if (newDomain !== tabInfo.domain) {
+            closePopupForTab(tabId);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+}
+
+// Listen to tab removal to clean up tracking
+if (chrome.tabs && chrome.tabs.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    try {
+      closePopupForTab(tabId);
+    } catch (e) {
+      // ignore
+    }
+  });
+}
+
+// Listen to window removal to clean up tracking when user closes popup manually
+if (chrome.windows && chrome.windows.onRemoved) {
+  chrome.windows.onRemoved.addListener((windowId) => {
+    try {
+      if (alertPopupWindows.has(windowId)) {
+        alertPopupWindows.delete(windowId);
+        // Find and remove the tab association
+        for (const [tabId, tabInfo] of dangerousTabsWithPopups.entries()) {
+          if (tabInfo.popupWindowId === windowId) {
+            dangerousTabsWithPopups.delete(tabId);
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+}
+
+// Helper function to extract domain from URL
+function extractDomainFromUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname;
+  } catch (e) {
+    return url;
+  }
+}
+
+// Close alert popups for tabs that are no longer active
+function closeAlertPopupsForInactiveTabs(activeTabId) {
+  for (const [tabId, tabInfo] of dangerousTabsWithPopups.entries()) {
+    if (tabId !== activeTabId && tabInfo.popupWindowId) {
+      try {
+        chrome.windows.remove(tabInfo.popupWindowId, () => {
+          if (!chrome.runtime.lastError) {
+            alertPopupWindows.delete(tabInfo.popupWindowId);
+          }
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+}
+
+// Close popup for a specific tab
+function closePopupForTab(tabId) {
+  if (dangerousTabsWithPopups.has(tabId)) {
+    const tabInfo = dangerousTabsWithPopups.get(tabId);
+    if (tabInfo.popupWindowId) {
+      try {
+        chrome.windows.remove(tabInfo.popupWindowId, () => {
+          if (!chrome.runtime.lastError) {
+            alertPopupWindows.delete(tabInfo.popupWindowId);
+          }
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+    dangerousTabsWithPopups.delete(tabId);
+  }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -75,64 +188,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true; // indicate async sendResponse
   } else if (message.type === 'create-alert') {
-    // Create notification
-    try {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: '/src/assets/icon32.png',
-        title: 'Warning! A recently visited URL might pose a threat.',
-        message:
-          `The URL ${message.url} might be a malicious website.\nThe character '${message.char}' (Unicode block: ${message.block}) belongs to a different Unicode range than the previous characters.\nThis URL might be trying to produce an IDN-based phishing attack.`
-      }, (_notificationId) => {
-        if (chrome.runtime.lastError) {
-          console.warn('Notification creation failed:', chrome.runtime.lastError.message);
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to create notification:', e.message);
-    }
+    // Get the sender tab ID to associate popup with the correct tab
+    const senderTabId = sender.tab ? sender.tab.id : null;
+    const alertDomain = extractDomainFromUrl(message.url);
 
-    // Create popup window
-    try {
-      const popupUrl = chrome.runtime.getURL(`src/html/popup.html?domain=${encodeURIComponent(message.url)}`);
-      chrome.windows.create({
-        url: popupUrl,
-        type: 'popup',
-        focused: true,
-        width: 400,
-        height: 300
-      }, (_window) => {
-        if (chrome.runtime.lastError) {
-          console.warn('Popup creation failed:', chrome.runtime.lastError.message);
-          // fallback: open without query
-          try {
-            chrome.windows.create({
-              url: chrome.runtime.getURL('src/html/popup.html'),
-              type: 'popup',
-              focused: true,
-              width: 400,
-              height: 300
-            });
-          } catch (fallbackError) {
-            console.warn('Fallback popup creation failed:', fallbackError.message);
-          }
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to create popup window:', e.message);
-      // fallback: open without query
+    // Only create popup if this is the active tab
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (chrome.runtime.lastError) return;
+
+      const activeTab = tabs && tabs[0];
+      const isActiveTab = activeTab && (senderTabId === activeTab.id);
+
+      // Create notification regardless of tab state
       try {
-        chrome.windows.create({
-          url: chrome.runtime.getURL('src/html/popup.html'),
-          type: 'popup',
-          focused: true,
-          width: 400,
-          height: 300
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: '/src/assets/icon32.png',
+          title: 'Warning! A recently visited URL might pose a threat.',
+          message:
+            `The URL ${message.url} might be a malicious website.\nThe character '${message.char}' (Unicode block: ${message.block}) belongs to a different Unicode range than the previous characters.\nThis URL might be trying to produce an IDN-based phishing attack.`
+        }, (_notificationId) => {
+          if (chrome.runtime.lastError) {
+            console.warn('Notification creation failed:', chrome.runtime.lastError.message);
+          }
         });
-      } catch (fallbackError) {
-        console.warn('Fallback popup creation failed:', fallbackError.message);
+      } catch (e) {
+        console.warn('Failed to create notification:', e.message);
       }
-    }
+
+      // Only create popup window if this is the active tab
+      if (isActiveTab && senderTabId) {
+        // Close any existing popup for this tab first
+        closePopupForTab(senderTabId);
+
+        try {
+          const popupUrl = chrome.runtime.getURL(`src/html/popup.html?domain=${encodeURIComponent(message.url)}`);
+          chrome.windows.create({
+            url: popupUrl,
+            type: 'popup',
+            focused: true,
+            width: 400,
+            height: 300
+          }, (popupWindow) => {
+            if (chrome.runtime.lastError) {
+              console.warn('Popup creation failed:', chrome.runtime.lastError.message);
+            } else if (popupWindow) {
+              // Track the popup window with the tab
+              dangerousTabsWithPopups.set(senderTabId, {
+                domain: alertDomain,
+                popupWindowId: popupWindow.id
+              });
+              alertPopupWindows.add(popupWindow.id);
+            }
+          });
+        } catch (e) {
+          console.warn('Failed to create popup window:', e.message);
+        }
+      }
+    });
     // Also notify any open extension popup or other listeners. Send a dedicated popup-alert message
     // and repeat after a short delay to ensure the popup receives it even if it wasn't ready yet.
     const payload = { type: 'popup-alert', url: message.url, char: message.char, block: message.block, _from_bg: true };
