@@ -100,11 +100,14 @@ function isWhitelisted(punnyDomain, wl) {
   return false;
 }
 
-// Analyze URL for popup without creating alert windows
-async function analyzeUrlForPopup(url) {
+// Store analysis results to avoid re-analysis
+let analysisResults = new Map(); // url -> {safe: boolean, reason: string, char?: string, block?: string}
+
+// Main analysis function - runs once per page load
+async function analyzeCurrentPage() {
   const educationalDomains = [
     'wikipedia.org',
-    'mozilla.org',
+    'mozilla.org', 
     'w3.org',
     'ietf.org',
     'unicode.org',
@@ -115,239 +118,164 @@ async function analyzeUrlForPopup(url) {
     'developer.mozilla.org'
   ];
 
-  let domain;
-  if (url.startsWith('https://') || url.startsWith('http://')) {
-    domain = extractDomain(url);
-  } else {
-    domain = url;
+  const url = window.location.href;
+  const domain = extractDomain(url);
+  
+  // Skip if already analyzed
+  if (analysisResults.has(url)) {
+    return analysisResults.get(url);
   }
 
   // Check if it's an educational domain
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
-      // Send safe message to popup
-      chrome.runtime.sendMessage({
-        type: 'safe-notification',
-        url: domain
-      });
-      return { safe: true, reason: 'educational' };
+      const result = { safe: true, reason: 'educational' };
+      analysisResults.set(url, result);
+      return result;
     }
   }
 
   // Ensure Unicode blocks are loaded
   await loadUnicodeBlocks();
 
-  let punnyDomain = punycode.ToUnicode(domain);
+  const punnyDomain = punycode.ToUnicode(domain);
 
-  // Check whitelist
+  // Analyze with promise-based approach to store results
   return new Promise((resolve) => {
     try {
       if (chrome.storage && chrome.storage.sync) {
         chrome.storage.sync.get(['whitelist'], (res) => {
+          let result;
+          
           if (chrome.runtime.lastError) {
             // If storage access fails, do direct check without whitelist
             const { mixed, block, char } = hasMixedScripts(punnyDomain);
             if (mixed) {
-              chrome.runtime.sendMessage({
-                type: 'popup-alert',
-                url: punnyDomain,
-                char,
-                block
-              });
-              resolve({ safe: false, mixed: true, char, block });
-            } else {
-              chrome.runtime.sendMessage({
-                type: 'safe-notification',
-                url: punnyDomain
-              });
-              resolve({ safe: true, reason: 'no-mixed-scripts' });
-            }
-            return;
-          }
-
-          const wl = (res && res.whitelist) || [];
-          if (isWhitelisted(punnyDomain, wl)) {
-            resolve({ safe: true, reason: 'whitelisted' });
-            return;
-          }
-          
-          const { mixed, block, char } = hasMixedScripts(punnyDomain);
-          if (mixed) {
-            chrome.runtime.sendMessage({
-              type: 'popup-alert',
-              url: punnyDomain,
-              char,
-              block
-            });
-            resolve({ safe: false, mixed: true, char, block });
-          } else {
-            chrome.runtime.sendMessage({
-              type: 'safe-notification',
-              url: punnyDomain
-            });
-            resolve({ safe: true, reason: 'no-mixed-scripts' });
-          }
-        });
-      } else {
-        // If chrome.storage isn't available, do direct check
-        const { mixed, block, char } = hasMixedScripts(punnyDomain);
-        if (mixed) {
-          chrome.runtime.sendMessage({
-            type: 'popup-alert',
-            url: punnyDomain,
-            char,
-            block
-          });
-          resolve({ safe: false, mixed: true, char, block });
-        } else {
-          chrome.runtime.sendMessage({
-            type: 'safe-notification',
-            url: punnyDomain
-          });
-          resolve({ safe: true, reason: 'no-mixed-scripts' });
-        }
-      }
-    } catch (err) {
-      // If chrome.storage access throws, fallback to direct check
-      const { mixed, block, char } = hasMixedScripts(punnyDomain);
-      if (mixed) {
-        chrome.runtime.sendMessage({
-          type: 'popup-alert',
-          url: punnyDomain,
-          char,
-          block
-        });
-        resolve({ safe: false, mixed: true, char, block });
-      } else {
-        chrome.runtime.sendMessage({
-          type: 'safe-notification',
-          url: punnyDomain
-        });
-        resolve({ safe: true, reason: 'no-mixed-scripts' });
-      }
-    }
-  });
-}
-
-// checkURL function for automatic page analysis (creates popup windows for threats)
-async function checkURL(url) {
-  const educationalDomains = [
-    'wikipedia.org',
-    'mozilla.org',
-    'w3.org',
-    'ietf.org',
-    'unicode.org',
-    'owasp.org',
-    'github.io',
-    'github.com',
-    'docs.microsoft.com',
-    'developer.mozilla.org'
-  ];
-
-  let domain;
-  if (url.startsWith('https://') || url.startsWith('http://')) {
-    domain = extractDomain(url);
-  } else {
-    domain = url;
-  }
-
-  // Check if it's an educational domain - skip analysis
-  for (const eduDomain of educationalDomains) {
-    if (domain.includes(eduDomain)) {
-      return; // Skip analysis for educational domains
-    }
-  }
-
-  // Ensure Unicode blocks are loaded
-  await loadUnicodeBlocks();
-
-  let punnyDomain = punycode.ToUnicode(domain);
-
-  // Check whitelist in storage
-  try {
-    if (chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get(['whitelist'], (res) => {
-        if (chrome.runtime.lastError) {
-          // If storage access fails, do direct check without whitelist
-          const { mixed, block, char } = hasMixedScripts(punnyDomain);
-          if (mixed) {
-            try {
+              result = { safe: false, reason: 'mixed-scripts', char, block };
+              // Create alert popup for vulnerable sites
               chrome.runtime.sendMessage({
                 type: 'create-alert',
                 url: punnyDomain,
                 char,
                 block
               });
-            } catch (sendErr) {
-              // Debug info suppressed in production
+            } else {
+              result = { safe: true, reason: 'no-mixed-scripts' };
+            }
+          } else {
+            const wl = (res && res.whitelist) || [];
+            if (isWhitelisted(punnyDomain, wl)) {
+              result = { safe: true, reason: 'whitelisted' };
+            } else {
+              const { mixed, block, char } = hasMixedScripts(punnyDomain);
+              if (mixed) {
+                result = { safe: false, reason: 'mixed-scripts', char, block };
+                // Create alert popup for vulnerable sites
+                chrome.runtime.sendMessage({
+                  type: 'create-alert',
+                  url: punnyDomain,
+                  char,
+                  block
+                });
+              } else {
+                result = { safe: true, reason: 'no-mixed-scripts' };
+              }
             }
           }
-          return;
-        }
-
-        const wl = (res && res.whitelist) || [];
-        if (isWhitelisted(punnyDomain, wl)) return; // whitelisted - no action needed
-        
+          
+          // Store result and resolve
+          analysisResults.set(url, result);
+          resolve(result);
+        });
+      } else {
+        // If chrome.storage isn't available, do direct check
         const { mixed, block, char } = hasMixedScripts(punnyDomain);
+        const result = mixed 
+          ? { safe: false, reason: 'mixed-scripts', char, block }
+          : { safe: true, reason: 'no-mixed-scripts' };
+          
         if (mixed) {
-          try {
-            chrome.runtime.sendMessage({
-              type: 'create-alert',
-              url: punnyDomain,
-              char,
-              block
-            });
-          } catch (sendErr) {
-            // Debug info suppressed in production
-          }
-        }
-        // If not mixed scripts, no action needed (don't send safe notifications for automatic analysis)
-      });
-    } else {
-      // If chrome.storage isn't available, do direct check
-      const { mixed, block, char } = hasMixedScripts(punnyDomain);
-      if (mixed) {
-        try {
+          // Create alert popup for vulnerable sites
           chrome.runtime.sendMessage({
             type: 'create-alert',
             url: punnyDomain,
             char,
             block
           });
-        } catch (sendErr) {
-          // Debug info suppressed in production
         }
+        
+        analysisResults.set(url, result);
+        resolve(result);
       }
-    }
-  } catch (err) {
-    // If chrome.storage access throws, fallback to direct check
-    const { mixed, block, char } = hasMixedScripts(punnyDomain);
-    if (mixed) {
-      try {
+    } catch (err) {
+      // If chrome.storage access throws, fallback to direct check
+      const { mixed, block, char } = hasMixedScripts(punnyDomain);
+      const result = mixed 
+        ? { safe: false, reason: 'mixed-scripts', char, block }
+        : { safe: true, reason: 'no-mixed-scripts' };
+        
+      if (mixed) {
+        // Create alert popup for vulnerable sites
         chrome.runtime.sendMessage({
           type: 'create-alert',
           url: punnyDomain,
           char,
           block
         });
-      } catch (sendErr) {
-        // Debug info suppressed in production
       }
+      
+      analysisResults.set(url, result);
+      resolve(result);
     }
-  }
+  });
 }
 
 if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
       if (_request && _request.type === 'analyze-url') {
-        // Handle manual analysis request from popup - do analysis but send result to popup, not create alert popups
-        analyzeUrlForPopup(_request.url).then((result) => {
+        // Return stored analysis results or analyze if not done yet
+        const url = _request.url || window.location.href;
+        
+        if (analysisResults.has(url)) {
+          // Already analyzed - send stored result to popup
+          const result = analysisResults.get(url);
+          if (result.safe) {
+            chrome.runtime.sendMessage({
+              type: 'safe-notification',
+              url: extractDomain(url)
+            });
+          } else {
+            chrome.runtime.sendMessage({
+              type: 'popup-alert',
+              url: extractDomain(url),
+              char: result.char,
+              block: result.block
+            });
+          }
           _sendResponse({ success: true, result: result });
-        }).catch(e => {
-          console.error('IDN Protection: Error checking URL:', e);
-          _sendResponse({ success: false, error: e.message });
-        });
+        } else {
+          // Not analyzed yet - analyze now
+          analyzeCurrentPage().then((result) => {
+            if (result.safe) {
+              chrome.runtime.sendMessage({
+                type: 'safe-notification',
+                url: extractDomain(url)
+              });
+            } else {
+              chrome.runtime.sendMessage({
+                type: 'popup-alert',
+                url: extractDomain(url),
+                char: result.char,
+                block: result.block
+              });
+            }
+            _sendResponse({ success: true, result: result });
+          }).catch(e => {
+            console.error('IDN Protection: Error checking URL:', e);
+            _sendResponse({ success: false, error: e.message });
+          });
+        }
         return true; // Keep message channel open for async response
       }
     } catch (e) {
@@ -356,24 +284,27 @@ if (chrome.runtime && chrome.runtime.onMessage) {
   });
 }
 
-// Initialize content script for automatic threat detection on page load
+// Initialize content script - analyze page once on load
+let initialized = false;
+
 async function initialize() {
+  if (initialized) return;
+  initialized = true;
+  
   try {
-    // Analyze current page for automatic threat detection (creates popup windows only for threats)
-    if (window.location && window.location.href) {
-      await checkURL(window.location.href).catch(e => console.error('IDN Protection: Error checking current URL:', e));
-    }
+    // Analyze current page once (creates popup windows only for threats)
+    await analyzeCurrentPage();
   } catch (e) {
-    // Error in initialization
+    console.error('IDN Protection: Error during initialization:', e);
   }
 }
 
 // punycode is provided by `punycode.js` (bundled as a content script before this file).
-// Run automatic threat detection on page load
+// Run analysis once on page load
 if (typeof document !== 'undefined') {
   // Run immediately if possible
   initialize();
   
-  // Also run on DOMContentLoaded as backup
+  // Also run on DOMContentLoaded as backup (but only if not already initialized)
   document.addEventListener('DOMContentLoaded', initialize);
 }
