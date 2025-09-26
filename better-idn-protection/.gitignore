@@ -6,3 +6,6 @@ dist/
 
 # Chrome extension specific
 *.pem
+
+# Test coverage reports
+coverage/
