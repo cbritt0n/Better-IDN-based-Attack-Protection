@@ -179,22 +179,24 @@ function triggerDomainAnalysis(domain) {
         return;
       }
       
-      // Filter out extension pages
-      const nonExtensionTabs = tabs.filter(tab => 
-        tab.url && 
-        !tab.url.startsWith('chrome-extension:') && 
-        !tab.url.startsWith('moz-extension:') &&
-        (tab.url.startsWith('http:') || tab.url.startsWith('https:'))
-      );
-      
-      if (nonExtensionTabs.length === 0) {
+      // Use the first available tab - filter too restrictive
+      const activeTab = tabs[0];
+      if (!activeTab || !activeTab.url) {
         analysisCompleted = true;
         clearTimeout(analysisTimeout);
-        setStatus('No web page found - extension only works on HTTP/HTTPS sites.');
+        setStatus('No active tab found - unable to analyze current page.');
         return;
       }
       
-      processTabForAnalysis(nonExtensionTabs[0], domain, () => {
+      // Skip only if it's definitely an extension page
+      if (activeTab.url.startsWith('chrome-extension:') || activeTab.url.startsWith('moz-extension:')) {
+        analysisCompleted = true;
+        clearTimeout(analysisTimeout);
+        setStatus('Extension pages cannot be analyzed - navigate to a website.');
+        return;
+      }
+      
+      processTabForAnalysis(activeTab, domain, () => {
         analysisCompleted = true;
         clearTimeout(analysisTimeout);
       });
@@ -263,7 +265,22 @@ function setCurrentDomain(domain) {
     currentDomain = domain || '';
     const element = document.getElementById('domain');
     if (element) {
-      element.textContent = currentDomain || 'No active domain';
+      // Display encoded punycode domain if it contains non-ASCII characters
+      let displayDomain = currentDomain || 'No active domain';
+      if (currentDomain && typeof punycode !== 'undefined') {
+        try {
+          const asciiDomain = punycode.ToASCII(currentDomain);
+          // If the ASCII version is different, show both forms
+          if (asciiDomain !== currentDomain && asciiDomain.includes('xn--')) {
+            displayDomain = `${currentDomain} (${asciiDomain})`;
+          } else {
+            displayDomain = currentDomain;
+          }
+        } catch (e) {
+          displayDomain = currentDomain; // fallback to original
+        }
+      }
+      element.textContent = displayDomain;
       element.classList.remove('loading');
     } else {
       debugLog('ERROR: domain element not found');
@@ -505,7 +522,21 @@ function renderWhitelist() {
       // Create whitelist items with safe DOM manipulation
       listContainer.textContent = '';
       wl.forEach(d => {
-        const display = (typeof punycode !== 'undefined') ? punycode.ToUnicode(d) : d;
+        // Show both Unicode and punycode forms when they differ
+        let display = d;
+        if (typeof punycode !== 'undefined') {
+          try {
+            const unicodeForm = punycode.ToUnicode(d);
+            if (unicodeForm !== d && d.includes('xn--')) {
+              // Show "Unicode (punycode)" format for international domains
+              display = `${unicodeForm} (${d})`;
+            } else {
+              display = unicodeForm;
+            }
+          } catch (e) {
+            display = d; // fallback to original
+          }
+        }
 
         const itemDiv = document.createElement('div');
         itemDiv.className = 'whitelist-item';
