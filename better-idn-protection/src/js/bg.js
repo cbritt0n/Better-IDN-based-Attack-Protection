@@ -21,8 +21,7 @@ if (chrome.tabs && chrome.tabs.onActivated) {
         if (chrome.runtime.lastError) return; // Handle errors silently
         if (tab && tab.url) {
           updateLastActiveTab(tab.url);
-          // Close alert popups when switching away from dangerous tabs
-          closeAlertPopupsForInactiveTabs(activeInfo.tabId);
+          // Don't close popups on tab switch - let them persist for dangerous tabs
         }
       });
     } catch (e) {
@@ -40,10 +39,7 @@ if (chrome.windows && chrome.windows.onFocusChanged) {
         if (chrome.runtime.lastError) return; // Handle errors silently
         if (tabs && tabs[0] && tabs[0].url) {
           updateLastActiveTab(tabs[0].url);
-          // Close alert popups when switching window focus away from dangerous tabs
-          if (tabs[0]) {
-            closeAlertPopupsForInactiveTabs(tabs[0].id);
-          }
+          // Don't close popups on window focus change - let them persist for dangerous tabs
         }
       });
     } catch (e) {
@@ -115,23 +111,6 @@ function extractDomainFromUrl(url) {
   }
 }
 
-// Close alert popups for tabs that are no longer active
-function closeAlertPopupsForInactiveTabs(activeTabId) {
-  for (const [tabId, tabInfo] of dangerousTabsWithPopups.entries()) {
-    if (tabId !== activeTabId && tabInfo.popupWindowId) {
-      try {
-        chrome.windows.remove(tabInfo.popupWindowId, () => {
-          if (!chrome.runtime.lastError) {
-            alertPopupWindows.delete(tabInfo.popupWindowId);
-          }
-        });
-      } catch (e) {
-        // ignore
-      }
-    }
-  }
-}
-
 // Close popup for a specific tab
 function closePopupForTab(tabId) {
   if (dangerousTabsWithPopups.has(tabId)) {
@@ -192,60 +171,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const senderTabId = sender.tab ? sender.tab.id : null;
     const alertDomain = extractDomainFromUrl(message.url);
 
-    // Only create popup if this is the active tab
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError) return;
+    // Create notification
+    try {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: '/src/assets/icon32.png',
+        title: 'Warning! A recently visited URL might pose a threat.',
+        message:
+          `The URL ${message.url} might be a malicious website.\nThe character '${message.char}' (Unicode block: ${message.block}) belongs to a different Unicode range than the previous characters.\nThis URL might be trying to produce an IDN-based phishing attack.`
+      }, (_notificationId) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Notification creation failed:', chrome.runtime.lastError.message);
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to create notification:', e.message);
+    }
 
-      const activeTab = tabs && tabs[0];
-      const isActiveTab = activeTab && (senderTabId === activeTab.id);
+    // Create popup window for dangerous domain (regardless of tab active state)
+    if (senderTabId) {
+      // Close any existing popup for this tab first
+      closePopupForTab(senderTabId);
 
-      // Create notification regardless of tab state
       try {
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: '/src/assets/icon32.png',
-          title: 'Warning! A recently visited URL might pose a threat.',
-          message:
-            `The URL ${message.url} might be a malicious website.\nThe character '${message.char}' (Unicode block: ${message.block}) belongs to a different Unicode range than the previous characters.\nThis URL might be trying to produce an IDN-based phishing attack.`
-        }, (_notificationId) => {
+        const popupUrl = chrome.runtime.getURL(`src/html/popup.html?domain=${encodeURIComponent(message.url)}`);
+        chrome.windows.create({
+          url: popupUrl,
+          type: 'popup',
+          focused: true,
+          width: 400,
+          height: 300
+        }, (popupWindow) => {
           if (chrome.runtime.lastError) {
-            console.warn('Notification creation failed:', chrome.runtime.lastError.message);
+            console.warn('Popup creation failed:', chrome.runtime.lastError.message);
+          } else if (popupWindow) {
+            // Track the popup window with the tab
+            dangerousTabsWithPopups.set(senderTabId, {
+              domain: alertDomain,
+              popupWindowId: popupWindow.id
+            });
+            alertPopupWindows.add(popupWindow.id);
           }
         });
       } catch (e) {
-        console.warn('Failed to create notification:', e.message);
+        console.warn('Failed to create popup window:', e.message);
       }
-
-      // Only create popup window if this is the active tab
-      if (isActiveTab && senderTabId) {
-        // Close any existing popup for this tab first
-        closePopupForTab(senderTabId);
-
-        try {
-          const popupUrl = chrome.runtime.getURL(`src/html/popup.html?domain=${encodeURIComponent(message.url)}`);
-          chrome.windows.create({
-            url: popupUrl,
-            type: 'popup',
-            focused: true,
-            width: 400,
-            height: 300
-          }, (popupWindow) => {
-            if (chrome.runtime.lastError) {
-              console.warn('Popup creation failed:', chrome.runtime.lastError.message);
-            } else if (popupWindow) {
-              // Track the popup window with the tab
-              dangerousTabsWithPopups.set(senderTabId, {
-                domain: alertDomain,
-                popupWindowId: popupWindow.id
-              });
-              alertPopupWindows.add(popupWindow.id);
-            }
-          });
-        } catch (e) {
-          console.warn('Failed to create popup window:', e.message);
-        }
-      }
-    });
+    }
     // Also notify any open extension popup or other listeners. Send a dedicated popup-alert message
     // and repeat after a short delay to ensure the popup receives it even if it wasn't ready yet.
     const payload = { type: 'popup-alert', url: message.url, char: message.char, block: message.block, _from_bg: true };
