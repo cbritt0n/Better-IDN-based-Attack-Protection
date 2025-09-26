@@ -256,79 +256,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {
       // service worker may not have any listeners; ignore
     }
-  } else if (message.type === 'analyze-domain') {
-    // Handle manual domain analysis request from popup
-    try {
-      // Get the active tab and send analysis message to content script
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
-          // No active tab - do direct analysis for popup
-          analyzeUrlDirectlyForPopup(message.url || 'unknown');
-          sendResponse({ success: true, method: 'direct-no-tab' });
-          return;
-        }
-
-        const activeTab = tabs[0];
-        if (activeTab && activeTab.id && activeTab.url) {
-          // Send message to content script to analyze the URL
-          chrome.tabs.sendMessage(activeTab.id, {
-            type: 'analyze-url',
-            url: message.url || activeTab.url
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              // Content script might not be loaded, do direct analysis for popup
-              const analysisUrl = message.url || activeTab.url;
-              analyzeUrlDirectlyForPopup(analysisUrl);
-              sendResponse({ success: true, method: 'direct' });
-            } else if (response && response.result) {
-              // Content script responded - send appropriate message to popup based on result
-              const result = response.result;
-              const domain = extractDomainFromUrl(message.url || activeTab.url);
-              
-              if (result.safe) {
-                let statusMessage = 'Domain analysis completed - appears safe.';
-                if (result.reason === 'educational') {
-                  statusMessage = 'Educational domain - considered trusted.';
-                } else if (result.reason === 'whitelisted') {
-                  statusMessage = 'Domain is whitelisted and considered safe.';
-                } else if (result.reason === 'no-mixed-scripts') {
-                  statusMessage = 'No mixed script characters detected - appears safe.';
-                }
-                
-                chrome.runtime.sendMessage({
-                  type: 'safe-notification',
-                  url: domain,
-                  message: statusMessage
-                });
-              } else {
-                // Show actual domain with encoded characters from analysis result
-                const threatDomain = result.domain || domain;
-                chrome.runtime.sendMessage({
-                  type: 'popup-alert',
-                  url: threatDomain,
-                  char: result.char,
-                  block: result.block
-                });
-              }
-              sendResponse({ success: true, method: 'content-script', result: result });
-            } else {
-              // No response from content script
-              sendResponse({ success: false, method: 'content-script-no-response' });
-            }
-          });
-        } else {
-          // Invalid tab - do direct analysis for popup
-          analyzeUrlDirectlyForPopup(message.url || 'unknown');
-          sendResponse({ success: true, method: 'direct-invalid-tab' });
-        }
-      });
-    } catch (e) {
-      // Error occurred - do direct analysis for popup
-      analyzeUrlDirectlyForPopup(message.url || 'error');
-      sendResponse({ success: true, method: 'direct-error', error: e.message });
-    }
-    return true; // Indicate async response
   }
+  // Note: analyze-domain handler removed - extension popup now communicates directly with content script
+  // This eliminates duplicate message flows causing red/green cycling
 });
 
 // Direct URL analysis when content script is not available
@@ -386,56 +316,8 @@ async function analyzeUrlDirectly(url) {
   }
 }
 
-// Direct URL analysis for popup - sends messages to popup instead of creating alert windows
-async function analyzeUrlDirectlyForPopup(url) {
-  const educationalDomains = [
-    'wikipedia.org',
-    'mozilla.org',
-    'w3.org',
-    'ietf.org',
-    'unicode.org',
-    'owasp.org',
-    'github.io',
-    'github.com',
-    'docs.microsoft.com',
-    'developer.mozilla.org'
-  ];
-
-  let domain;
-  if (url.startsWith('https://') || url.startsWith('http://')) {
-    domain = extractDomainFromUrl(url);
-  } else {
-    domain = url;
-  }
-
-  // Check if it's an educational domain
-  for (const eduDomain of educationalDomains) {
-    if (domain.includes(eduDomain)) {
-      chrome.runtime.sendMessage({
-        type: 'safe-notification',
-        url: domain
-      });
-      return;
-    }
-  }
-
-  // For other domains, do basic mixed script detection
-  const hasMixed = checkForMixedScriptsBasic(domain);
-  
-  if (hasMixed.mixed) {
-    chrome.runtime.sendMessage({
-      type: 'popup-alert',
-      url: domain,
-      char: hasMixed.char,
-      block: hasMixed.block
-    });
-  } else {
-    chrome.runtime.sendMessage({
-      type: 'safe-notification',
-      url: domain
-    });
-  }
-}
+// Note: analyzeUrlDirectlyForPopup function removed - no longer needed 
+// Extension popup now gets analysis directly from content script
 
 // Basic mixed script detection for background script
 function checkForMixedScriptsBasic(domain) {
