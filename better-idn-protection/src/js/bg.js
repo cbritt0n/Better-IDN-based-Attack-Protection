@@ -280,9 +280,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               const analysisUrl = message.url || activeTab.url;
               analyzeUrlDirectlyForPopup(analysisUrl);
               sendResponse({ success: true, method: 'direct' });
+            } else if (response && response.result) {
+              // Content script responded - send appropriate message to popup based on result
+              const result = response.result;
+              const domain = extractDomainFromUrl(message.url || activeTab.url);
+              
+              if (result.safe) {
+                let statusMessage = 'Domain analysis completed - appears safe.';
+                if (result.reason === 'educational') {
+                  statusMessage = 'Educational domain - considered trusted.';
+                } else if (result.reason === 'whitelisted') {
+                  statusMessage = 'Domain is whitelisted and considered safe.';
+                } else if (result.reason === 'no-mixed-scripts') {
+                  statusMessage = 'No mixed script characters detected - appears safe.';
+                }
+                
+                chrome.runtime.sendMessage({
+                  type: 'safe-notification',
+                  url: domain,
+                  message: statusMessage
+                });
+              } else {
+                // Show actual domain with encoded characters from analysis result
+                const threatDomain = result.domain || domain;
+                chrome.runtime.sendMessage({
+                  type: 'popup-alert',
+                  url: threatDomain,
+                  char: result.char,
+                  block: result.block
+                });
+              }
+              sendResponse({ success: true, method: 'content-script', result: result });
             } else {
-              // Content script responded and sent messages to popup
-              sendResponse({ success: true, method: 'content-script', result: response?.result });
+              // No response from content script
+              sendResponse({ success: false, method: 'content-script-no-response' });
             }
           });
         } else {

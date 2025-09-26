@@ -57,7 +57,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
           setCurrentDomain(msg.url);
         }
       }
-      setStatus(`Suspicious character: ${msg.char} (Unicode block: ${msg.block})`);
+      // Show the actual URL with encoded characters and suspicious character info
+      const displayUrl = msg.url || currentDomain;
+      setStatus(`THREAT DETECTED: The URL "${displayUrl}" contains suspicious character '${msg.char}' (Unicode block: ${msg.block}) which may indicate an IDN-based phishing attack.`);
       return;
     }
     // Handle safe notification messages
@@ -71,7 +73,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
           setCurrentDomain(msg.url);
         }
       }
-      setStatus('Domain appears to use consistent script characters and may be less likely to be an IDN-based attack. This is not a guarantee of safety.');
+      // Use custom message if provided, otherwise default
+      const statusMessage = msg.message || 'Domain appears to use consistent script characters and may be less likely to be an IDN-based attack. This is not a guarantee of safety.';
+      setStatus(statusMessage);
 
       // Update the status card to show safe state
       const statusCard = document.getElementById('warning-section');

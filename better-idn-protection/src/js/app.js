@@ -151,7 +151,7 @@ async function analyzeCurrentPage() {
             // If storage access fails, do direct check without whitelist
             const { mixed, block, char } = hasMixedScripts(punnyDomain);
             if (mixed) {
-              result = { safe: false, reason: 'mixed-scripts', char, block };
+              result = { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain };
               // Create alert popup for vulnerable sites
               chrome.runtime.sendMessage({
                 type: 'create-alert',
@@ -169,7 +169,7 @@ async function analyzeCurrentPage() {
             } else {
               const { mixed, block, char } = hasMixedScripts(punnyDomain);
               if (mixed) {
-                result = { safe: false, reason: 'mixed-scripts', char, block };
+                result = { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain };
                 // Create alert popup for vulnerable sites
                 chrome.runtime.sendMessage({
                   type: 'create-alert',
@@ -191,7 +191,7 @@ async function analyzeCurrentPage() {
         // If chrome.storage isn't available, do direct check
         const { mixed, block, char } = hasMixedScripts(punnyDomain);
         const result = mixed 
-          ? { safe: false, reason: 'mixed-scripts', char, block }
+          ? { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain }
           : { safe: true, reason: 'no-mixed-scripts' };
           
         if (mixed) {
@@ -211,7 +211,7 @@ async function analyzeCurrentPage() {
       // If chrome.storage access throws, fallback to direct check
       const { mixed, block, char } = hasMixedScripts(punnyDomain);
       const result = mixed 
-        ? { safe: false, reason: 'mixed-scripts', char, block }
+        ? { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain }
         : { safe: true, reason: 'no-mixed-scripts' };
         
       if (mixed) {
@@ -234,43 +234,17 @@ if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
       if (_request && _request.type === 'analyze-url') {
-        // Return stored analysis results or analyze if not done yet
+        // Return stored analysis results - DO NOT send new messages (prevents cycling)
         const url = _request.url || window.location.href;
         
         if (analysisResults.has(url)) {
-          // Already analyzed - send stored result to popup
+          // Already analyzed - just return stored result, no new messages
           const result = analysisResults.get(url);
-          if (result.safe) {
-            chrome.runtime.sendMessage({
-              type: 'safe-notification',
-              url: extractDomain(url)
-            });
-          } else {
-            chrome.runtime.sendMessage({
-              type: 'popup-alert',
-              url: extractDomain(url),
-              char: result.char,
-              block: result.block
-            });
-          }
-          _sendResponse({ success: true, result: result });
+          _sendResponse({ success: true, result: result, alreadyAnalyzed: true });
         } else {
-          // Not analyzed yet - analyze now
+          // Not analyzed yet - analyze now but don't send duplicate messages
           analyzeCurrentPage().then((result) => {
-            if (result.safe) {
-              chrome.runtime.sendMessage({
-                type: 'safe-notification',
-                url: extractDomain(url)
-              });
-            } else {
-              chrome.runtime.sendMessage({
-                type: 'popup-alert',
-                url: extractDomain(url),
-                char: result.char,
-                block: result.block
-              });
-            }
-            _sendResponse({ success: true, result: result });
+            _sendResponse({ success: true, result: result, alreadyAnalyzed: false });
           }).catch(e => {
             console.error('IDN Protection: Error checking URL:', e);
             _sendResponse({ success: false, error: e.message });
