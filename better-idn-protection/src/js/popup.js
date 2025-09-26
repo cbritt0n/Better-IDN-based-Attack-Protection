@@ -188,8 +188,31 @@ function triggerDomainAnalysis(domain) {
           clearTimeout(analysisTimeout);
 
           if (chrome.runtime.lastError) {
-            debugLog('Content script not available:', chrome.runtime.lastError.message);
-            setStatus('Content script not loaded - refresh page to enable analysis.');
+            debugLog('Content script not available, using fallback analysis:', chrome.runtime.lastError.message);
+            // Fallback: ask background script to do basic analysis
+            chrome.runtime.sendMessage({
+              type: 'fallback-analysis',
+              url: domain.startsWith('http') ? domain : `https://${domain}`
+            }, (fallbackResponse) => {
+              if (fallbackResponse && fallbackResponse.result) {
+                const result = fallbackResponse.result;
+                if (result.safe) {
+                  setStatus('Analysis complete - domain appears safe.');
+                  const statusCard = document.getElementById('warning-section');
+                  if (statusCard) {
+                    statusCard.className = 'status-card safe';
+                  }
+                } else {
+                  setStatus(`THREAT DETECTED: The domain "${result.domain || domain}" contains suspicious character '${result.char}' (Unicode block: ${result.block}) which may indicate an IDN-based phishing attack.`);
+                  const statusCard = document.getElementById('warning-section');
+                  if (statusCard) {
+                    statusCard.className = 'status-card danger';
+                  }
+                }
+              } else {
+                setStatus('Unable to analyze - please refresh page and try again.');
+              }
+            });
             return;
           }
 
