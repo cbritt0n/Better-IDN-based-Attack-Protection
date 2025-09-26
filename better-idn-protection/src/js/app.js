@@ -151,6 +151,16 @@ async function checkURL(url) {
             } catch (sendErr) {
               // Debug info suppressed in production
             }
+          } else {
+            // Domain appears to use consistent script - show safe notification
+            try {
+              chrome.runtime.sendMessage({
+                type: 'create-safe-notification',
+                url: punnyDomain
+              });
+            } catch (sendErr) {
+              // Debug info suppressed in production
+            }
           }
           return;
         }
@@ -165,6 +175,16 @@ async function checkURL(url) {
               url: punnyDomain,
               char,
               block
+            });
+          } catch (sendErr) {
+            // Debug info suppressed in production
+          }
+        } else {
+          // Domain appears to use consistent script - show safe notification
+          try {
+            chrome.runtime.sendMessage({
+              type: 'create-safe-notification',
+              url: punnyDomain
             });
           } catch (sendErr) {
             // Debug info suppressed in production
@@ -185,6 +205,16 @@ async function checkURL(url) {
         } catch (sendErr) {
           // Debug info suppressed in production
         }
+      } else {
+        // Domain appears to use consistent script - show safe notification
+        try {
+          chrome.runtime.sendMessage({
+            type: 'create-safe-notification',
+            url: punnyDomain
+          });
+        } catch (sendErr) {
+          // Debug info suppressed in production
+        }
       }
     }
   } catch (err) {
@@ -197,6 +227,16 @@ async function checkURL(url) {
           url: punnyDomain,
           char,
           block
+        });
+      } catch (sendErr) {
+        // Debug info suppressed in production
+      }
+    } else {
+      // Domain appears to use consistent script - show safe notification
+      try {
+        chrome.runtime.sendMessage({
+          type: 'create-safe-notification',
+          url: punnyDomain
         });
       } catch (sendErr) {
         // Debug info suppressed in production

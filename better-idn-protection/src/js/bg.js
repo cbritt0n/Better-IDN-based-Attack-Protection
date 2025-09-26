@@ -144,5 +144,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {
       // service worker may not have any listeners; ignore
     }
+  } else if (message.type === 'create-safe-notification') {
+    // Create safe notification with liability-conscious language
+    try {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: '/src/assets/icon32.png',
+        title: 'IDN Analysis Complete',
+        message: `The domain ${message.url} appears to use consistent script characters and may be less likely to be an IDN-based attack. This is not a guarantee of safety - always verify URLs independently.`
+      }, (_notificationId) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Safe notification creation failed:', chrome.runtime.lastError.message);
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to create safe notification:', e.message);
+    }
   }
 });
