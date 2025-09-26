@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+    <title>Better IDN Protection</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../css/popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <header class="header">
+            <div class="header-content">
+                <h1>
+                    <svg class="shield-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L3 7V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    IDN Protection
+                </h1>
+                <div class="header-subtitle">Protecting against Unicode attacks</div>
+            </div>
+        </header>
+
+        <main class="content">
+            <div class="status-card" id="warning-section">
+                <div class="status-title">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10.29 3.86L1.82 18A2 2 0 003.54 21H20.46A2 2 0 0022.18 18L13.71 3.86A2 2 0 0010.29 3.86Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="12" cy="17" r="1" fill="currentColor"/>
+                    </svg>
+                    Security Alert
+                </div>
+                <div class="status-description">
+                    A suspicious URL pattern was detected that may indicate an IDN-based phishing attack.
+                </div>
+                <div id="suspicious">Analyzing current page...</div>
+            </div>
+
+            <div class="domain-section">
+                <div class="domain-label">Current Domain</div>
+                <div class="domain-display">
+                    <span id="domain" class="loading">
+                        <span class="spinner"></span>
+                        Loading...
+                    </span>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="add-wl" class="btn btn-primary">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Whitelist
+                </button>
+                <button id="remove-wl" class="btn btn-secondary">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Remove
+                </button>
+            </div>
+
+            <div class="whitelist-section">
+                <div class="section-title">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Trusted Domains
+                </div>
+                <div class="whitelist-container">
+                    <ul id="whitelist-list">
+                        <li class="whitelist-empty">Loading whitelist...</li>
+                    </ul>
+                </div>
+                <button id="clear-wl" class="btn btn-danger btn-small clear-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M19,6V20A2,2 0 0,1 17,20H7A2,2 0 0,1 5,20V6M8,6V4A2,2 0 0,1 10,4H14A2,2 0 0,1 16,4V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Clear All
+                </button>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <a href="https://en.wikipedia.org/wiki/IDN_homograph_attack" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="footer-link">
+                Learn more about IDN attacks →
+            </a>
+        </footer>
+    </div>
+
+    <!-- Load scripts -->
+    <script src="/src/js/punycode.js"></script>
+    <script src="/src/js/popup.js"></script>
+</body>
+</html>

@@ -5,7 +5,7 @@ const UNICODE_BLOCKS = [
   { name: 'Cyrillic', start: 1024, end: 1279 },
   { name: 'Greek', start: 880, end: 1023 },
   { name: 'Hangul Syllables', start: 44032, end: 55203 },
-  { name: 'CJK Unified Ideographs', start: 19968, end: 40959 },
+  { name: 'CJK Unified Ideographs', start: 19968, end: 40959 }
   // add a few more ranges used in tests
 ];
 

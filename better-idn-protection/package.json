@@ -1,18 +1,77 @@
 {
   "name": "better-idn-protection",
-  "version": "1.0.0",
-  "description": "Chrome extension to detect mixed-script IDN homograph attacks.",
+  "version": "2.0.0",
+  "description": "Advanced browser extension protecting against IDN homograph phishing attacks",
+  "keywords": [
+    "security",
+    "phishing",
+    "idn",
+    "homograph",
+    "browser-extension",
+    "chrome",
+    "edge"
+  ],
+  "homepage": "https://github.com/cbritt0n/Better-IDN-based-Attack-Protection",
+  "bugs": "https://github.com/cbritt0n/Better-IDN-based-Attack-Protection/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cbritt0n/Better-IDN-based-Attack-Protection.git"
+  },
+  "author": "cbritt0n",
+  "license": "MIT",
   "engines": {
-    "node": ">=14"
+    "node": ">=18"
   },
   "scripts": {
-    "test": "node test_mixed_scripts.js",
-    "lint": "./node_modules/.bin/eslint . --ext .js --max-warnings=0 || true",
-    "prepare": "echo 'prepare step - none'",
-    "pack": "node -e \"const z=require('child_process').spawnSync('zip',['-r','extension.zip','.','-x','node_modules/**','.github/**','*.log']); console.log('Wrote extension.zip');\""
+    "test": "node scripts/test_mixed_scripts.js && npm run test:unit",
+    "test:unit": "jest --coverage",
+    "test:e2e": "playwright test",
+    "test:watch": "jest --watch",
+    "lint": "eslint . --ext .js,.ts --max-warnings=0",
+    "lint:fix": "eslint . --ext .js,.ts --fix",
+    "build": "npm run clean && npm run copy-files",
+    "build:dev": "npm run clean && npm run copy-files",
+    "copy-files": "mkdir -p dist && cp -r src/ manifest.json dist/ && cp -r docs/ dist/docs/",
+    "clean": "rm -rf dist/ *.zip coverage/",
+    "pack": "npm run build && cd dist && zip -r ../extension.zip .",
+    "validate": "npm run lint && npm test",
+    "prepare": "echo 'Ready for development'",
+    "start": "npm run validate && echo 'Extension is ready for loading in browser'"
   },
   "devDependencies": {
-    "eslint": "^8.50.0"
+    "@playwright/test": "^1.40.0",
+    "@types/chrome": "^0.0.250",
+    "@types/jest": "^29.5.0",
+    "eslint": "^8.50.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
   },
-  "license": "MIT"
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/test/unit/setup.js"],
+    "testMatch": ["<rootDir>/test/unit/production.test.js"],
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "src/js/*.js",
+      "!src/js/punycode.js",
+      "!jest.config.js",
+      "!webpack.config.js",
+      "!playwright.config.js",
+      "!test/**",
+      "!node_modules/**",
+      "!coverage/**",
+      "!dist/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["text", "lcov", "html"],
+    "coverageThreshold": {
+      "global": {
+        "branches": 0,
+        "functions": 0,
+        "lines": 0,
+        "statements": 0
+      }
+    },
+    "verbose": true
+  }
 }
