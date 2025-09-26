@@ -15,7 +15,7 @@ let unicodeBlocksLoaded = false;
 
 async function loadUnicodeBlocks() {
   if (unicodeBlocksLoaded) return;
-  
+
   try {
     if (typeof window !== 'undefined' && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
       const url = chrome.runtime.getURL('src/js/unicode_blocks.json');
@@ -113,24 +113,24 @@ async function checkURL(url) {
     'docs.microsoft.com',
     'developer.mozilla.org'
   ];
-  
+
   let domain;
   if (url.startsWith('https://') || url.startsWith('http://')) {
     domain = extractDomain(url);
   } else {
     domain = url;
   }
-  
+
   // Check if it's an educational domain
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
       return; // Skip educational domains
     }
   }
-  
+
   // Ensure Unicode blocks are loaded
   await loadUnicodeBlocks();
-  
+
   let punnyDomain = punycode.ToUnicode(domain);
 
   // Check whitelist in storage
