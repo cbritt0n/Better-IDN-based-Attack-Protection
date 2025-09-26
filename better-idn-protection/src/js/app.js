@@ -230,32 +230,57 @@ async function analyzeCurrentPage() {
   });
 }
 
+// Content script ready flag
+let contentScriptReady = false;
+
 if (chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((_request, _sender, _sendResponse) => {
     try {
       if (_request && _request.type === 'analyze-url') {
-        // Return stored analysis results - DO NOT send new messages (prevents cycling)
-        const url = _request.url || window.location.href;
-        
-        if (analysisResults.has(url)) {
-          // Already analyzed - just return stored result, no new messages
-          const result = analysisResults.get(url);
-          _sendResponse({ success: true, result: result, alreadyAnalyzed: true });
-        } else {
-          // Not analyzed yet - analyze now but don't send duplicate messages
-          analyzeCurrentPage().then((result) => {
-            _sendResponse({ success: true, result: result, alreadyAnalyzed: false });
+        // Ensure content script is properly initialized
+        if (!contentScriptReady) {
+          // Initialize if not ready yet
+          initialize().then(() => {
+            contentScriptReady = true;
+            handleAnalysisRequest(_request, _sendResponse);
           }).catch(e => {
-            console.error('IDN Protection: Error checking URL:', e);
-            _sendResponse({ success: false, error: e.message });
+            console.error('IDN Protection: Error during delayed initialization:', e);
+            _sendResponse({ success: false, error: 'Content script initialization failed' });
           });
+        } else {
+          handleAnalysisRequest(_request, _sendResponse);
         }
         return true; // Keep message channel open for async response
       }
     } catch (e) {
-      // Error info suppressed in production
+      console.error('IDN Protection: Message handler error:', e);
+      _sendResponse({ success: false, error: 'Message handler error' });
     }
   });
+}
+
+function handleAnalysisRequest(_request, _sendResponse) {
+  try {
+    // Return stored analysis results - DO NOT send new messages (prevents cycling)
+    const url = _request.url || window.location.href;
+    
+    if (analysisResults.has(url)) {
+      // Already analyzed - just return stored result, no new messages
+      const result = analysisResults.get(url);
+      _sendResponse({ success: true, result: result, alreadyAnalyzed: true });
+    } else {
+      // Not analyzed yet - analyze now but don't send duplicate messages
+      analyzeCurrentPage().then((result) => {
+        _sendResponse({ success: true, result: result, alreadyAnalyzed: false });
+      }).catch(e => {
+        console.error('IDN Protection: Error checking URL:', e);
+        _sendResponse({ success: false, error: e.message });
+      });
+    }
+  } catch (e) {
+    console.error('IDN Protection: Analysis request error:', e);
+    _sendResponse({ success: false, error: 'Analysis request failed' });
+  }
 }
 
 // Initialize content script - analyze page once on load
@@ -268,8 +293,11 @@ async function initialize() {
   try {
     // Analyze current page once (creates popup windows only for threats)
     await analyzeCurrentPage();
+    // Mark content script as ready for message handling
+    contentScriptReady = true;
   } catch (e) {
     console.error('IDN Protection: Error during initialization:', e);
+    throw e; // Re-throw to handle in message listener
   }
 }
 

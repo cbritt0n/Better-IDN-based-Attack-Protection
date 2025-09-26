@@ -256,48 +256,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {
       // service worker may not have any listeners; ignore
     }
-  } else if (message.type === 'fallback-analysis') {
-    // Fallback analysis when content script is not available
-    try {
-      const domain = extractDomainFromUrl(message.url);
-      const educationalDomains = [
-        'wikipedia.org', 'mozilla.org', 'w3.org', 'ietf.org', 'unicode.org',
-        'owasp.org', 'github.io', 'github.com', 'docs.microsoft.com', 'developer.mozilla.org'
-      ];
-
-      // Check educational domains
-      let isEducational = false;
-      for (const eduDomain of educationalDomains) {
-        if (domain.includes(eduDomain)) {
-          isEducational = true;
-          break;
-        }
-      }
-
-      if (isEducational) {
-        sendResponse({ success: true, result: { safe: true, reason: 'educational', domain: domain } });
-      } else {
-        // Basic mixed script check
-        const mixedResult = checkForMixedScriptsBasic(domain);
-        if (mixedResult.mixed) {
-          sendResponse({ 
-            success: true, 
-            result: { 
-              safe: false, 
-              reason: 'mixed-scripts', 
-              char: mixedResult.char, 
-              block: mixedResult.block,
-              domain: domain
-            } 
-          });
-        } else {
-          sendResponse({ success: true, result: { safe: true, reason: 'no-mixed-scripts', domain: domain } });
-        }
-      }
-    } catch (e) {
-      sendResponse({ success: false, error: e.message });
-    }
-    return true; // Async response
   }
   // Note: analyze-domain handler removed - extension popup now communicates directly with content script
   // This eliminates duplicate message flows causing red/green cycling

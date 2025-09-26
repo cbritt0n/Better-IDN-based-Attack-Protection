@@ -44,6 +44,87 @@ function setStatus(text) {
   }
 }
 
+function processAnalysisResult(result, domain) {
+  debugLog('Processing analysis result:', result);
+  
+  if (result.safe) {
+    let statusMessage = 'Domain analysis completed - appears safe.';
+    if (result.reason === 'educational') {
+      statusMessage = 'Educational domain - considered trusted.';
+    } else if (result.reason === 'whitelisted') {
+      statusMessage = 'Domain is whitelisted and considered safe.';
+    } else if (result.reason === 'no-mixed-scripts') {
+      statusMessage = 'No mixed script characters detected - appears safe.';
+    }
+
+    // Update popup to show safe result
+    const statusCard = document.getElementById('warning-section');
+    if (statusCard) {
+      statusCard.className = 'status-card safe';
+
+      // Update title for safe result
+      const statusTitle = statusCard.querySelector('.status-title');
+      if (statusTitle) {
+        statusTitle.textContent = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+
+        const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path1.setAttribute('d', 'M9 12L11 14L15 10');
+        path1.setAttribute('stroke', 'currentColor');
+        path1.setAttribute('stroke-width', '2');
+        path1.setAttribute('stroke-linecap', 'round');
+        path1.setAttribute('stroke-linejoin', 'round');
+
+        const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
+        path2.setAttribute('stroke', 'currentColor');
+        path2.setAttribute('stroke-width', '2');
+        path2.setAttribute('stroke-linecap', 'round');
+        path2.setAttribute('stroke-linejoin', 'round');
+
+        svg.appendChild(path1);
+        svg.appendChild(path2);
+        statusTitle.appendChild(svg);
+
+        const textNode = document.createTextNode(' Analysis Complete');
+        statusTitle.appendChild(textNode);
+      }
+
+      // Update description for safe result
+      const statusDesc = statusCard.querySelector('.status-description');
+      if (statusDesc) {
+        statusDesc.textContent = 'No mixed script characters detected in domain name.';
+      }
+    }
+
+    setStatus(statusMessage);
+  } else {
+    // Show threat result with actual encoded domain
+    const threatDomain = result.domain || domain;
+    const statusCard = document.getElementById('warning-section');
+    if (statusCard) {
+      statusCard.className = 'status-card danger';
+
+      // Update title for threat result
+      const statusTitle = statusCard.querySelector('.status-title');
+      if (statusTitle) {
+        statusTitle.textContent = '⚠️ Threat Detected';
+      }
+
+      // Update description for threat result  
+      const statusDesc = statusCard.querySelector('.status-description');
+      if (statusDesc) {
+        statusDesc.textContent = 'Mixed script characters may indicate phishing attempt.';
+      }
+    }
+
+    setStatus(`THREAT DETECTED: The URL "${threatDomain}" contains suspicious character '${result.char}' (Unicode block: ${result.block}) which may indicate an IDN-based phishing attack.`);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   debugLog('Received message:', msg);
   try {
@@ -188,114 +269,35 @@ function triggerDomainAnalysis(domain) {
           clearTimeout(analysisTimeout);
 
           if (chrome.runtime.lastError) {
-            debugLog('Content script not available, using fallback analysis:', chrome.runtime.lastError.message);
-            // Fallback: ask background script to do basic analysis
-            chrome.runtime.sendMessage({
-              type: 'fallback-analysis',
-              url: domain.startsWith('http') ? domain : `https://${domain}`
-            }, (fallbackResponse) => {
-              if (fallbackResponse && fallbackResponse.result) {
-                const result = fallbackResponse.result;
-                if (result.safe) {
-                  setStatus('Analysis complete - domain appears safe.');
+            debugLog('Content script not available:', chrome.runtime.lastError.message);
+            // Wait a bit and retry - content script might still be loading
+            setTimeout(() => {
+              chrome.tabs.sendMessage(activeTab.id, {
+                type: 'analyze-url',
+                url: domain.startsWith('http') ? domain : `https://${domain}`
+              }, (retryResponse) => {
+                if (chrome.runtime.lastError || !retryResponse) {
+                  // Content script still not ready - ask user to refresh
+                  setStatus('Content script not loaded - please refresh the page to enable analysis.');
                   const statusCard = document.getElementById('warning-section');
                   if (statusCard) {
-                    statusCard.className = 'status-card safe';
+                    statusCard.className = 'status-card';
                   }
-                } else {
-                  setStatus(`THREAT DETECTED: The domain "${result.domain || domain}" contains suspicious character '${result.char}' (Unicode block: ${result.block}) which may indicate an IDN-based phishing attack.`);
-                  const statusCard = document.getElementById('warning-section');
-                  if (statusCard) {
-                    statusCard.className = 'status-card danger';
-                  }
+                } else if (retryResponse && retryResponse.result) {
+                  // Process the successful retry response
+                  const result = retryResponse.result;
+                  debugLog('Got retry analysis result:', result);
+                  processAnalysisResult(result, domain);
                 }
-              } else {
-                setStatus('Unable to analyze - please refresh page and try again.');
-              }
-            });
+              });
+            }, 500); // Wait 500ms for content script to load
             return;
           }
 
           if (response && response.result) {
             const result = response.result;
             debugLog('Got analysis result:', result);
-
-            if (result.safe) {
-              let statusMessage = 'Domain analysis completed - appears safe.';
-              if (result.reason === 'educational') {
-                statusMessage = 'Educational domain - considered trusted.';
-              } else if (result.reason === 'whitelisted') {
-                statusMessage = 'Domain is whitelisted and considered safe.';
-              } else if (result.reason === 'no-mixed-scripts') {
-                statusMessage = 'No mixed script characters detected - appears safe.';
-              }
-
-              // Update popup to show safe result
-              const statusCard = document.getElementById('warning-section');
-              if (statusCard) {
-                statusCard.className = 'status-card safe';
-
-                // Update title for safe result
-                const statusTitle = statusCard.querySelector('.status-title');
-                if (statusTitle) {
-                  statusTitle.textContent = '';
-                  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                  svg.setAttribute('class', 'icon');
-                  svg.setAttribute('viewBox', '0 0 24 24');
-                  svg.setAttribute('fill', 'none');
-
-                  const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                  path1.setAttribute('d', 'M9 12L11 14L15 10');
-                  path1.setAttribute('stroke', 'currentColor');
-                  path1.setAttribute('stroke-width', '2');
-                  path1.setAttribute('stroke-linecap', 'round');
-                  path1.setAttribute('stroke-linejoin', 'round');
-
-                  const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                  path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
-                  path2.setAttribute('stroke', 'currentColor');
-                  path2.setAttribute('stroke-width', '2');
-                  path2.setAttribute('stroke-linecap', 'round');
-                  path2.setAttribute('stroke-linejoin', 'round');
-
-                  svg.appendChild(path1);
-                  svg.appendChild(path2);
-                  statusTitle.appendChild(svg);
-
-                  const textNode = document.createTextNode(' Analysis Complete');
-                  statusTitle.appendChild(textNode);
-                }
-
-                // Update description for safe result
-                const statusDesc = statusCard.querySelector('.status-description');
-                if (statusDesc) {
-                  statusDesc.textContent = 'No mixed script characters detected in domain name.';
-                }
-              }
-
-              setStatus(statusMessage);
-            } else {
-              // Show threat result with actual encoded domain
-              const threatDomain = result.domain || domain;
-              const statusCard = document.getElementById('warning-section');
-              if (statusCard) {
-                statusCard.className = 'status-card danger';
-
-                // Update title for threat result
-                const statusTitle = statusCard.querySelector('.status-title');
-                if (statusTitle) {
-                  statusTitle.textContent = '⚠️ Threat Detected';
-                }
-
-                // Update description for threat result  
-                const statusDesc = statusCard.querySelector('.status-description');
-                if (statusDesc) {
-                  statusDesc.textContent = 'Mixed script characters may indicate phishing attempt.';
-                }
-              }
-
-              setStatus(`THREAT DETECTED: The URL "${threatDomain}" contains suspicious character '${result.char}' (Unicode block: ${result.block}) which may indicate an IDN-based phishing attack.`);
-            }
+            processAnalysisResult(result, domain);
           } else {
             debugLog('No analysis result received');
             setStatus('No analysis result available - refresh page to re-analyze.');
