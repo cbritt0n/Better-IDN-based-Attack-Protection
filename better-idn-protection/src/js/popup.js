@@ -125,97 +125,8 @@ function processAnalysisResult(result, domain) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
-  debugLog('Received message:', msg);
-  try {
-    // Support direct 'popup-alert' messages from background when the popup is opened
-    if (msg && msg.type === 'popup-alert') {
-      if (msg.url) {
-        try {
-          const u = new URL(msg.url);
-          setCurrentDomain(u.hostname);
-        } catch (e) {
-          debugLog('URL parsing error:', e);
-          setCurrentDomain(msg.url);
-        }
-      }
-      // Show the actual URL with encoded characters and suspicious character info
-      const displayUrl = msg.url || currentDomain;
-      setStatus(`THREAT DETECTED: The URL "${displayUrl}" contains suspicious character '${msg.char}' (Unicode block: ${msg.block}) which may indicate an IDN-based phishing attack.`);
-      return;
-    }
-    // Handle safe notification messages
-    if (msg && msg.type === 'safe-notification') {
-      if (msg.url) {
-        try {
-          const u = new URL(msg.url);
-          setCurrentDomain(u.hostname);
-        } catch (e) {
-          debugLog('URL parsing error:', e);
-          setCurrentDomain(msg.url);
-        }
-      }
-      // Use custom message if provided, otherwise default
-      const statusMessage = msg.message || 'Domain appears to use consistent script characters and may be less likely to be an IDN-based attack. This is not a guarantee of safety.';
-      setStatus(statusMessage);
-
-      // Update the status card to show safe state
-      const statusCard = document.getElementById('warning-section');
-      if (statusCard) {
-        statusCard.className = 'status-card safe';
-
-        // Update title
-        const statusTitle = statusCard.querySelector('.status-title');
-        if (statusTitle) {
-          statusTitle.textContent = '';
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('class', 'icon');
-          svg.setAttribute('viewBox', '0 0 24 24');
-          svg.setAttribute('fill', 'none');
-
-          const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path1.setAttribute('d', 'M9 12L11 14L15 10');
-          path1.setAttribute('stroke', 'currentColor');
-          path1.setAttribute('stroke-width', '2');
-          path1.setAttribute('stroke-linecap', 'round');
-          path1.setAttribute('stroke-linejoin', 'round');
-
-          const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
-          path2.setAttribute('stroke', 'currentColor');
-          path2.setAttribute('stroke-width', '2');
-          path2.setAttribute('stroke-linecap', 'round');
-          path2.setAttribute('stroke-linejoin', 'round');
-
-          svg.appendChild(path1);
-          svg.appendChild(path2);
-          statusTitle.appendChild(svg);
-
-          const textNode = document.createTextNode(' Analysis Complete');
-          statusTitle.appendChild(textNode);
-        }
-
-        // Update description
-        const statusDesc = statusCard.querySelector('.status-description');
-        if (statusDesc) {
-          statusDesc.textContent = 'No mixed script characters detected in domain name.';
-        }
-      }
-      return;
-    }
-
-    if (msg && msg.char && msg.block) {
-      const url = msg.url || '';
-      const hostname = (function () {
-        try { return new URL(url).hostname; } catch (e) { debugLog('URL parsing error:', e); return ''; }
-      })();
-      if (hostname) setCurrentDomain(hostname);
-      setStatus(`Suspicious character: ${msg.char} (Unicode block: ${msg.block})`);
-    }
-  } catch (error) {
-    debugLog('Error processing message:', error);
-  }
-});
+// Message listener removed - extension popup now uses direct content script communication only
+// This eliminates conflicts and duplicate messaging that caused status cycling
 
 function triggerDomainAnalysis(domain) {
   debugLog('Triggering domain analysis for:', domain);
@@ -249,71 +160,100 @@ function triggerDomainAnalysis(domain) {
   }, 2000); // 2 second timeout as genuine fallback
 
   try {
-    // Directly query content script for analysis without background message routing
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    // Get the tab we want to analyze (not the popup tab)
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
-        analysisCompleted = true;
-        clearTimeout(analysisTimeout);
-        setStatus('No active tab found - unable to analyze current page.');
-        return;
-      }
-
-      const activeTab = tabs[0];
-      if (activeTab && activeTab.id) {
-        // Send direct message to content script to get stored analysis
-        chrome.tabs.sendMessage(activeTab.id, {
-          type: 'analyze-url',
-          url: domain.startsWith('http') ? domain : `https://${domain}`
-        }, (response) => {
-          analysisCompleted = true;
-          clearTimeout(analysisTimeout);
-
-          if (chrome.runtime.lastError) {
-            debugLog('Content script not available:', chrome.runtime.lastError.message);
-            // Wait a bit and retry - content script might still be loading
-            setTimeout(() => {
-              chrome.tabs.sendMessage(activeTab.id, {
-                type: 'analyze-url',
-                url: domain.startsWith('http') ? domain : `https://${domain}`
-              }, (retryResponse) => {
-                if (chrome.runtime.lastError || !retryResponse) {
-                  // Content script still not ready - ask user to refresh
-                  setStatus('Content script not loaded - please refresh the page to enable analysis.');
-                  const statusCard = document.getElementById('warning-section');
-                  if (statusCard) {
-                    statusCard.className = 'status-card';
-                  }
-                } else if (retryResponse && retryResponse.result) {
-                  // Process the successful retry response
-                  const result = retryResponse.result;
-                  debugLog('Got retry analysis result:', result);
-                  processAnalysisResult(result, domain);
-                }
-              });
-            }, 500); // Wait 500ms for content script to load
+        // Fallback to current window if lastFocusedWindow doesn't work
+        chrome.tabs.query({ active: true, currentWindow: true }, (fallbackTabs) => {
+          if (chrome.runtime.lastError || !fallbackTabs || fallbackTabs.length === 0) {
+            analysisCompleted = true;
+            clearTimeout(analysisTimeout);
+            setStatus('No active tab found - unable to analyze current page.');
             return;
           }
-
-          if (response && response.result) {
-            const result = response.result;
-            debugLog('Got analysis result:', result);
-            processAnalysisResult(result, domain);
-          } else {
-            debugLog('No analysis result received');
-            setStatus('No analysis result available - refresh page to re-analyze.');
-          }
+          processTabForAnalysis(fallbackTabs[0], domain, () => {
+            analysisCompleted = true;
+            clearTimeout(analysisTimeout);
+          });
         });
-      } else {
+        return;
+      }
+      
+      // Filter out extension pages
+      const nonExtensionTabs = tabs.filter(tab => 
+        tab.url && 
+        !tab.url.startsWith('chrome-extension:') && 
+        !tab.url.startsWith('moz-extension:') &&
+        (tab.url.startsWith('http:') || tab.url.startsWith('https:'))
+      );
+      
+      if (nonExtensionTabs.length === 0) {
         analysisCompleted = true;
         clearTimeout(analysisTimeout);
-        setStatus('Invalid tab - unable to analyze current page.');
+        setStatus('No web page found - extension only works on HTTP/HTTPS sites.');
+        return;
       }
+      
+      processTabForAnalysis(nonExtensionTabs[0], domain, () => {
+        analysisCompleted = true;
+        clearTimeout(analysisTimeout);
+      });
     });
   } catch (error) {
     analysisCompleted = true;
     clearTimeout(analysisTimeout);
     debugLog('Error in triggerDomainAnalysis:', error);
     setStatus('Analysis error - refresh page to try again.');
+  }
+}
+
+function processTabForAnalysis(activeTab, domain, onComplete) {
+  if (activeTab && activeTab.id) {
+    // Send direct message to content script to get stored analysis
+    chrome.tabs.sendMessage(activeTab.id, {
+      type: 'analyze-url',
+      url: domain.startsWith('http') ? domain : `https://${domain}`
+    }, (response) => {
+      onComplete();
+
+      if (chrome.runtime.lastError) {
+        debugLog('Content script not available:', chrome.runtime.lastError.message);
+        // Wait a bit and retry - content script might still be loading
+        setTimeout(() => {
+          chrome.tabs.sendMessage(activeTab.id, {
+            type: 'analyze-url',
+            url: domain.startsWith('http') ? domain : `https://${domain}`
+          }, (retryResponse) => {
+            if (chrome.runtime.lastError || !retryResponse) {
+              // Content script still not ready - ask user to refresh
+              setStatus('Content script not loaded - please refresh the page to enable analysis.');
+              const statusCard = document.getElementById('warning-section');
+              if (statusCard) {
+                statusCard.className = 'status-card';
+              }
+            } else if (retryResponse && retryResponse.result) {
+              // Process the successful retry response
+              const result = retryResponse.result;
+              debugLog('Got retry analysis result:', result);
+              processAnalysisResult(result, domain);
+            }
+          });
+        }, 500); // Wait 500ms for content script to load
+        return;
+      }
+
+      if (response && response.result) {
+        const result = response.result;
+        debugLog('Got analysis result:', result);
+        processAnalysisResult(result, domain);
+      } else {
+        debugLog('No analysis result received');
+        setStatus('No analysis result available - refresh page to re-analyze.');
+      }
+    });
+  } else {
+    onComplete();
+    setStatus('Invalid tab - unable to analyze current page.');
   }
 }
 
