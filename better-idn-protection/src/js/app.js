@@ -229,8 +229,8 @@ async function analyzeUrlForPopup(url) {
   });
 }
 
+// checkURL function for automatic page analysis (creates popup windows for threats)
 async function checkURL(url) {
-  // Skip educational and trusted domains to avoid false positives
   const educationalDomains = [
     'wikipedia.org',
     'mozilla.org',
@@ -251,19 +251,10 @@ async function checkURL(url) {
     domain = url;
   }
 
-  // Check if it's an educational domain
+  // Check if it's an educational domain - skip analysis
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
-      // Send a safe notification for educational domains since they're trusted
-      try {
-        chrome.runtime.sendMessage({
-          type: 'create-safe-notification',
-          url: punnyDomain || domain
-        });
-      } catch (sendErr) {
-        // Debug info suppressed in production
-      }
-      return; // Skip further analysis for educational domains
+      return; // Skip analysis for educational domains
     }
   }
 
@@ -290,22 +281,13 @@ async function checkURL(url) {
             } catch (sendErr) {
               // Debug info suppressed in production
             }
-          } else {
-            // Domain appears to use consistent script - show safe notification
-            try {
-              chrome.runtime.sendMessage({
-                type: 'create-safe-notification',
-                url: punnyDomain
-              });
-            } catch (sendErr) {
-              // Debug info suppressed in production
-            }
           }
           return;
         }
 
         const wl = (res && res.whitelist) || [];
-        if (isWhitelisted(punnyDomain, wl)) return; // whitelisted
+        if (isWhitelisted(punnyDomain, wl)) return; // whitelisted - no action needed
+        
         const { mixed, block, char } = hasMixedScripts(punnyDomain);
         if (mixed) {
           try {
@@ -318,17 +300,8 @@ async function checkURL(url) {
           } catch (sendErr) {
             // Debug info suppressed in production
           }
-        } else {
-          // Domain appears to use consistent script - show safe notification
-          try {
-            chrome.runtime.sendMessage({
-              type: 'create-safe-notification',
-              url: punnyDomain
-            });
-          } catch (sendErr) {
-            // Debug info suppressed in production
-          }
         }
+        // If not mixed scripts, no action needed (don't send safe notifications for automatic analysis)
       });
     } else {
       // If chrome.storage isn't available, do direct check
@@ -340,16 +313,6 @@ async function checkURL(url) {
             url: punnyDomain,
             char,
             block
-          });
-        } catch (sendErr) {
-          // Debug info suppressed in production
-        }
-      } else {
-        // Domain appears to use consistent script - show safe notification
-        try {
-          chrome.runtime.sendMessage({
-            type: 'create-safe-notification',
-            url: punnyDomain
           });
         } catch (sendErr) {
           // Debug info suppressed in production
@@ -366,16 +329,6 @@ async function checkURL(url) {
           url: punnyDomain,
           char,
           block
-        });
-      } catch (sendErr) {
-        // Debug info suppressed in production
-      }
-    } else {
-      // Domain appears to use consistent script - show safe notification
-      try {
-        chrome.runtime.sendMessage({
-          type: 'create-safe-notification',
-          url: punnyDomain
         });
       } catch (sendErr) {
         // Debug info suppressed in production
@@ -403,31 +356,24 @@ if (chrome.runtime && chrome.runtime.onMessage) {
   });
 }
 
-async function run() {
+// Initialize content script for automatic threat detection on page load
+async function initialize() {
   try {
-    
-    // First try to analyze current page URL directly
+    // Analyze current page for automatic threat detection (creates popup windows only for threats)
     if (window.location && window.location.href) {
       await checkURL(window.location.href).catch(e => console.error('IDN Protection: Error checking current URL:', e));
     }
-    
-    // Also get URL from background script as fallback
-    if (chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'get-page-url' }, async (response) => {
-        if (chrome.runtime.lastError) {
-          // Error getting page URL from background
-          return;
-        }
-        if (response && response.url && response.url !== window.location.href) {
-          await checkURL(response.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
-        }
-      });
-    }
   } catch (e) {
-    // Error in run function
+    // Error in initialization
   }
 }
 
 // punycode is provided by `punycode.js` (bundled as a content script before this file).
-// Content script is ready but only runs analysis when requested by popup
-// This prevents automatic popup creation on every page load
+// Run automatic threat detection on page load
+if (typeof document !== 'undefined') {
+  // Run immediately if possible
+  initialize();
+  
+  // Also run on DOMContentLoaded as backup
+  document.addEventListener('DOMContentLoaded', initialize);
+}
