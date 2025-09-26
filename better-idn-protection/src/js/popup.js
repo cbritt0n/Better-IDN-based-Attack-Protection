@@ -160,45 +160,29 @@ function triggerDomainAnalysis(domain) {
   }, 2000); // 2 second timeout as genuine fallback
 
   try {
-    // Get the tab we want to analyze (not the popup tab)
-    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
-        // Fallback to current window if lastFocusedWindow doesn't work
-        chrome.tabs.query({ active: true, currentWindow: true }, (fallbackTabs) => {
-          if (chrome.runtime.lastError || !fallbackTabs || fallbackTabs.length === 0) {
-            analysisCompleted = true;
-            clearTimeout(analysisTimeout);
-            setStatus('No active tab found - unable to analyze current page.');
-            return;
-          }
-          processTabForAnalysis(fallbackTabs[0], domain, () => {
-            analysisCompleted = true;
-            clearTimeout(analysisTimeout);
-          });
+    // Ask background script for the correct tab to analyze  
+    chrome.runtime.sendMessage({ type: 'get-tab-for-analysis' }, (response) => {
+      if (chrome.runtime.lastError || !response || !response.tabId) {
+        analysisCompleted = true;
+        clearTimeout(analysisTimeout);
+        setStatus('No web page available for analysis - open a website first.');
+        return;
+      }
+      
+      // Use the tab ID provided by background script
+      const tabId = response.tabId;
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          analysisCompleted = true;
+          clearTimeout(analysisTimeout);
+          setStatus('Unable to access tab for analysis.');
+          return;
+        }
+        
+        processTabForAnalysis(tab, domain, () => {
+          analysisCompleted = true;
+          clearTimeout(analysisTimeout);
         });
-        return;
-      }
-      
-      // Use the first available tab - filter too restrictive
-      const activeTab = tabs[0];
-      if (!activeTab || !activeTab.url) {
-        analysisCompleted = true;
-        clearTimeout(analysisTimeout);
-        setStatus('No active tab found - unable to analyze current page.');
-        return;
-      }
-      
-      // Skip only if it's definitely an extension page
-      if (activeTab.url.startsWith('chrome-extension:') || activeTab.url.startsWith('moz-extension:')) {
-        analysisCompleted = true;
-        clearTimeout(analysisTimeout);
-        setStatus('Extension pages cannot be analyzed - navigate to a website.');
-        return;
-      }
-      
-      processTabForAnalysis(activeTab, domain, () => {
-        analysisCompleted = true;
-        clearTimeout(analysisTimeout);
       });
     });
   } catch (error) {
@@ -709,26 +693,24 @@ function getCurrentTabDomain() {
     debugLog('Error parsing URL params:', e);
   }
 
+  // Ask background script for the last active non-extension tab
   try {
     chrome.runtime.sendMessage({ type: 'get-active-tab' }, (res) => {
       if (chrome.runtime.lastError) {
-        debugLog('Error getting active tab:', chrome.runtime.lastError.message);
-        // Fallback to direct tab query
+        debugLog('Error getting active tab from background:', chrome.runtime.lastError.message);
+        // Fallback: try to get the most recent non-extension tab directly
         fallbackToTabQuery();
       } else if (res && res.url) {
         try {
           const u = new URL(res.url);
-          // ignore extension pages
-          if (u.protocol && u.protocol.startsWith('chrome-extension')) {
-            fallbackToTabQuery();
-          } else {
-            setCurrentDomain(u.hostname);
-          }
+          // Use the URL from background script (it tracks non-extension tabs)
+          setCurrentDomain(u.hostname);
         } catch (e) {
           debugLog('Error parsing response URL:', e.message);
           fallbackToTabQuery();
         }
       } else {
+        debugLog('No URL received from background script');
         fallbackToTabQuery();
       }
     });
@@ -742,28 +724,47 @@ function fallbackToTabQuery() {
   debugLog('Falling back to direct tab query');
   try {
     if (chrome.tabs && chrome.tabs.query) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      // Query all tabs and find the most recent non-extension HTTP/HTTPS tab
+      chrome.tabs.query({}, (tabs) => {
         if (chrome.runtime.lastError) {
-          debugLog('Error querying tabs:', chrome.runtime.lastError.message);
+          debugLog('Error querying all tabs:', chrome.runtime.lastError.message);
+          setCurrentDomain('Unable to detect domain');
           return;
         }
+        
         if (tabs && tabs.length) {
-          const candidate = tabs.find(t => t && t.url && /^https?:\/\//.test(t.url));
-          if (candidate && candidate.url) {
+          // Filter for web pages (HTTP/HTTPS) and sort by last accessed
+          const webTabs = tabs.filter(t => 
+            t && t.url && 
+            (t.url.startsWith('http://') || t.url.startsWith('https://')) &&
+            !t.url.startsWith('chrome-extension:') &&
+            !t.url.startsWith('moz-extension:')
+          ).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+          
+          if (webTabs.length > 0) {
             try {
-              const u = new URL(candidate.url);
+              const u = new URL(webTabs[0].url);
               setCurrentDomain(u.hostname);
             } catch (e) {
-              debugLog('Error parsing URL:', e.message);
+              debugLog('Error parsing fallback URL:', e.message);
+              setCurrentDomain('Invalid URL format');
             }
+          } else {
+            debugLog('No web tabs found');
+            setCurrentDomain('No web pages open');
           }
+        } else {
+          debugLog('No tabs found');
+          setCurrentDomain('No tabs available');
         }
       });
     } else {
       debugLog('Tabs API not available');
+      setCurrentDomain('Tabs API unavailable');
     }
   } catch (e) {
     debugLog('Error in fallback tab query:', e.message);
+    setCurrentDomain('Tab query failed');
   }
 }
 

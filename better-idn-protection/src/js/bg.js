@@ -166,6 +166,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       else sendResponse({ url: null });
     });
     return true; // indicate async sendResponse
+  } else if (message.type === 'get-tab-for-analysis') {
+    // Return the best tab ID for content script analysis
+    chrome.tabs.query({}, (tabs) => {
+      if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
+        sendResponse({ tabId: null });
+        return;
+      }
+      
+      // Find the most recent web tab (HTTP/HTTPS, not extension)
+      const webTabs = tabs.filter(t => 
+        t && t.url && 
+        (t.url.startsWith('http://') || t.url.startsWith('https://')) &&
+        !t.url.startsWith('chrome-extension:') &&
+        !t.url.startsWith('moz-extension:')
+      ).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+      
+      if (webTabs.length > 0) {
+        sendResponse({ tabId: webTabs[0].id, url: webTabs[0].url });
+      } else {
+        sendResponse({ tabId: null });
+      }
+    });
+    return true; // async response
   } else if (message.type === 'create-alert') {
     // Get the sender tab ID to associate popup with the correct tab
     const senderTabId = sender.tab ? sender.tab.id : null;
