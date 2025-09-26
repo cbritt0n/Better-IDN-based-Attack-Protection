@@ -249,17 +249,12 @@ function setCurrentDomain(domain) {
     currentDomain = domain || '';
     const element = document.getElementById('domain');
     if (element) {
-      // Display encoded punycode domain if it contains non-ASCII characters
+      // Display Unicode characters (like å) instead of punycode
       let displayDomain = currentDomain || 'No active domain';
       if (currentDomain && typeof punycode !== 'undefined') {
         try {
-          const asciiDomain = punycode.ToASCII(currentDomain);
-          // If the ASCII version is different, show both forms
-          if (asciiDomain !== currentDomain && asciiDomain.includes('xn--')) {
-            displayDomain = `${currentDomain} (${asciiDomain})`;
-          } else {
-            displayDomain = currentDomain;
-          }
+          // Convert to Unicode to show readable characters like å
+          displayDomain = punycode.ToUnicode(currentDomain);
         } catch (e) {
           displayDomain = currentDomain; // fallback to original
         }
@@ -506,17 +501,11 @@ function renderWhitelist() {
       // Create whitelist items with safe DOM manipulation
       listContainer.textContent = '';
       wl.forEach(d => {
-        // Show both Unicode and punycode forms when they differ
+        // Show Unicode characters (like å) for better readability
         let display = d;
         if (typeof punycode !== 'undefined') {
           try {
-            const unicodeForm = punycode.ToUnicode(d);
-            if (unicodeForm !== d && d.includes('xn--')) {
-              // Show "Unicode (punycode)" format for international domains
-              display = `${unicodeForm} (${d})`;
-            } else {
-              display = unicodeForm;
-            }
+            display = punycode.ToUnicode(d);
           } catch (e) {
             display = d; // fallback to original
           }
