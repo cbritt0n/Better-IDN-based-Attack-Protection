@@ -160,5 +160,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {
       console.warn('Failed to create safe notification:', e.message);
     }
+
+    // Also notify any open extension popup. Send a dedicated safe notification message
+    // and repeat after a short delay to ensure the popup receives it even if it wasn't ready yet.
+    const payload = { type: 'safe-notification', url: message.url, _from_bg: true };
+    try {
+      chrome.runtime.sendMessage(payload);
+      setTimeout(() => {
+        try { chrome.runtime.sendMessage(payload); } catch (e) { /* ignore */ }
+      }, 300);
+    } catch (e) {
+      // service worker may not have any listeners; ignore
+    }
   }
 });

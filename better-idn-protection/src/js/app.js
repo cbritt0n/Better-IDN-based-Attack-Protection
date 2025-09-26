@@ -124,7 +124,16 @@ async function checkURL(url) {
   // Check if it's an educational domain
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
-      return; // Skip educational domains
+      // Send a safe notification for educational domains since they're trusted
+      try {
+        chrome.runtime.sendMessage({
+          type: 'create-safe-notification',
+          url: punnyDomain || domain
+        });
+      } catch (sendErr) {
+        // Debug info suppressed in production
+      }
+      return; // Skip further analysis for educational domains
     }
   }
 

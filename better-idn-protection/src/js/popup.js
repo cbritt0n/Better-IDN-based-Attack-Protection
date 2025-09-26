@@ -60,6 +60,63 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
       setStatus(`Suspicious character: ${msg.char} (Unicode block: ${msg.block})`);
       return;
     }
+    // Handle safe notification messages
+    if (msg && msg.type === 'safe-notification') {
+      if (msg.url) {
+        try {
+          const u = new URL(msg.url);
+          setCurrentDomain(u.hostname);
+        } catch (e) {
+          debugLog('URL parsing error:', e);
+          setCurrentDomain(msg.url);
+        }
+      }
+      setStatus('Domain appears to use consistent script characters and may be less likely to be an IDN-based attack. This is not a guarantee of safety.');
+
+      // Update the status card to show safe state
+      const statusCard = document.getElementById('warning-section');
+      if (statusCard) {
+        statusCard.className = 'status-card safe';
+
+        // Update title
+        const statusTitle = statusCard.querySelector('.status-title');
+        if (statusTitle) {
+          statusTitle.textContent = '';
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('class', 'icon');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'none');
+
+          const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path1.setAttribute('d', 'M9 12L11 14L15 10');
+          path1.setAttribute('stroke', 'currentColor');
+          path1.setAttribute('stroke-width', '2');
+          path1.setAttribute('stroke-linecap', 'round');
+          path1.setAttribute('stroke-linejoin', 'round');
+
+          const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
+          path2.setAttribute('stroke', 'currentColor');
+          path2.setAttribute('stroke-width', '2');
+          path2.setAttribute('stroke-linecap', 'round');
+          path2.setAttribute('stroke-linejoin', 'round');
+
+          svg.appendChild(path1);
+          svg.appendChild(path2);
+          statusTitle.appendChild(svg);
+
+          const textNode = document.createTextNode(' Analysis Complete');
+          statusTitle.appendChild(textNode);
+        }
+
+        // Update description
+        const statusDesc = statusCard.querySelector('.status-description');
+        if (statusDesc) {
+          statusDesc.textContent = 'No mixed script characters detected in domain name.';
+        }
+      }
+      return;
+    }
     if (msg && msg.char && msg.block) {
       const url = msg.url || '';
       const hostname = (function () {
