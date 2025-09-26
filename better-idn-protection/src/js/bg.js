@@ -277,13 +277,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }, (_response) => {
             if (chrome.runtime.lastError) {
               // Content script might not be loaded, directly analyze the URL
-              console.log('Content script not available, doing direct analysis');
               const analysisUrl = message.url || activeTab.url;
               analyzeUrlDirectly(analysisUrl);
               sendResponse({ success: true, method: 'direct' });
             } else {
               // Content script responded - it already did the analysis
-              console.log('Content script completed analysis');
               sendResponse({ success: true, method: 'content-script' });
             }
           });
@@ -304,7 +302,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Direct URL analysis when content script is not available
 async function analyzeUrlDirectly(url) {
-  console.log('Direct URL analysis for:', url);
   
   // This is a simplified version of the checkURL logic from app.js
   const educationalDomains = [
@@ -330,7 +327,6 @@ async function analyzeUrlDirectly(url) {
   // Check if it's an educational domain
   for (const eduDomain of educationalDomains) {
     if (domain.includes(eduDomain)) {
-      console.log('Educational domain detected:', domain);
       // Send safe notification for educational domains
       chrome.runtime.sendMessage({
         type: 'create-safe-notification',
@@ -345,7 +341,6 @@ async function analyzeUrlDirectly(url) {
   const hasMixed = checkForMixedScriptsBasic(domain);
   
   if (hasMixed.mixed) {
-    console.log('Mixed scripts detected:', hasMixed);
     chrome.runtime.sendMessage({
       type: 'create-alert',
       url: domain,
@@ -353,7 +348,6 @@ async function analyzeUrlDirectly(url) {
       block: hasMixed.block
     });
   } else {
-    console.log('No mixed scripts detected for:', domain);
     chrome.runtime.sendMessage({
       type: 'create-safe-notification',
       url: domain
