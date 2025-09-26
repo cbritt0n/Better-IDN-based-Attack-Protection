@@ -110,6 +110,7 @@ async function checkURL(url) {
     'unicode.org',
     'owasp.org',
     'github.io',
+    'github.com',
     'docs.microsoft.com',
     'developer.mozilla.org'
   ];
@@ -259,6 +260,10 @@ if (chrome.runtime && chrome.runtime.onMessage) {
     try {
       if (_request && _request.url) {
         checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
+      } else if (_request && _request.type === 'analyze-url') {
+        // Handle manual analysis request from popup
+        checkURL(_request.url).catch(e => console.error('IDN Protection: Error checking URL:', e));
+        _sendResponse({ success: true });
       }
     } catch (e) {
       // Error info suppressed in production

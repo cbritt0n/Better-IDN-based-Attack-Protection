@@ -130,6 +130,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
   }
 });
 
+function triggerDomainAnalysis(domain) {
+  debugLog('Triggering domain analysis for:', domain);
+  try {
+    // Send message to background script to analyze the current domain
+    chrome.runtime.sendMessage({
+      type: 'analyze-domain',
+      url: domain.startsWith('http') ? domain : `https://${domain}`
+    }, (_response) => {
+      if (chrome.runtime.lastError) {
+        debugLog('Error triggering domain analysis:', chrome.runtime.lastError.message);
+      } else {
+        debugLog('Domain analysis triggered successfully');
+      }
+    });
+  } catch (error) {
+    debugLog('Error in triggerDomainAnalysis:', error);
+  }
+}
+
 function setCurrentDomain(domain) {
   debugLog('Setting current domain:', domain);
   try {
@@ -146,6 +165,11 @@ function setCurrentDomain(domain) {
     isDomainWhitelisted(currentDomain, (isWL) => {
       toggleWarning(!isWL);
     });
+
+    // Trigger URL analysis for the current domain when popup opens
+    if (currentDomain) {
+      triggerDomainAnalysis(currentDomain);
+    }
   } catch (error) {
     debugLog('Error setting current domain:', error);
   }

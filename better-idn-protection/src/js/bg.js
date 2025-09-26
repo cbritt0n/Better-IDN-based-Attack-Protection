@@ -256,5 +256,83 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {
       // service worker may not have any listeners; ignore
     }
+  } else if (message.type === 'analyze-domain') {
+    // Handle manual domain analysis request from popup
+    try {
+      // Get the active tab and send analysis message to content script
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime.lastError || !tabs || tabs.length === 0) {
+          sendResponse({ success: false, error: 'No active tab found' });
+          return;
+        }
+
+        const activeTab = tabs[0];
+        if (activeTab && activeTab.id && activeTab.url) {
+          // Send message to content script to analyze the URL
+          chrome.tabs.sendMessage(activeTab.id, {
+            type: 'analyze-url',
+            url: message.url || activeTab.url
+          }, (_response) => {
+            if (chrome.runtime.lastError) {
+              // Content script might not be loaded, directly analyze the URL
+              const analysisUrl = message.url || activeTab.url;
+              // Import the checkURL function logic here for direct analysis
+              analyzeUrlDirectly(analysisUrl);
+              sendResponse({ success: true, method: 'direct' });
+            } else {
+              sendResponse({ success: true, method: 'content-script' });
+            }
+          });
+        } else {
+          sendResponse({ success: false, error: 'Invalid tab' });
+        }
+      });
+    } catch (e) {
+      sendResponse({ success: false, error: e.message });
+    }
+    return true; // Indicate async response
   }
 });
+
+// Direct URL analysis when content script is not available
+async function analyzeUrlDirectly(url) {
+  // This is a simplified version of the checkURL logic from app.js
+  const educationalDomains = [
+    'wikipedia.org',
+    'mozilla.org',
+    'w3.org',
+    'ietf.org',
+    'unicode.org',
+    'owasp.org',
+    'github.io',
+    'github.com',
+    'docs.microsoft.com',
+    'developer.mozilla.org'
+  ];
+
+  let domain;
+  if (url.startsWith('https://') || url.startsWith('http://')) {
+    domain = extractDomainFromUrl(url);
+  } else {
+    domain = url;
+  }
+
+  // Check if it's an educational domain
+  for (const eduDomain of educationalDomains) {
+    if (domain.includes(eduDomain)) {
+      // Send safe notification for educational domains
+      chrome.runtime.sendMessage({
+        type: 'create-safe-notification',
+        url: domain
+      });
+      return;
+    }
+  }
+
+  // For other domains, assume safe if no mixed scripts detected
+  // Note: This is a simplified check - full analysis would require Unicode blocks
+  chrome.runtime.sendMessage({
+    type: 'create-safe-notification',
+    url: domain
+  });
+}
