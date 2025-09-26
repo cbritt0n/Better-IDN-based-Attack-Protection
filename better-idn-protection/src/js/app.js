@@ -107,7 +107,7 @@ let analysisResults = new Map(); // url -> {safe: boolean, reason: string, char?
 async function analyzeCurrentPage() {
   const educationalDomains = [
     'wikipedia.org',
-    'mozilla.org', 
+    'mozilla.org',
     'w3.org',
     'ietf.org',
     'unicode.org',
@@ -120,7 +120,7 @@ async function analyzeCurrentPage() {
 
   const url = window.location.href;
   const domain = extractDomain(url);
-  
+
   // Skip if already analyzed
   if (analysisResults.has(url)) {
     return analysisResults.get(url);
@@ -146,7 +146,7 @@ async function analyzeCurrentPage() {
       if (chrome.storage && chrome.storage.sync) {
         chrome.storage.sync.get(['whitelist'], (res) => {
           let result;
-          
+
           if (chrome.runtime.lastError) {
             // If storage access fails, do direct check without whitelist
             const { mixed, block, char } = hasMixedScripts(punnyDomain);
@@ -182,7 +182,7 @@ async function analyzeCurrentPage() {
               }
             }
           }
-          
+
           // Store result and resolve
           analysisResults.set(url, result);
           resolve(result);
@@ -190,10 +190,10 @@ async function analyzeCurrentPage() {
       } else {
         // If chrome.storage isn't available, do direct check
         const { mixed, block, char } = hasMixedScripts(punnyDomain);
-        const result = mixed 
+        const result = mixed
           ? { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain }
           : { safe: true, reason: 'no-mixed-scripts' };
-          
+
         if (mixed) {
           // Create alert popup for vulnerable sites
           chrome.runtime.sendMessage({
@@ -203,17 +203,17 @@ async function analyzeCurrentPage() {
             block
           });
         }
-        
+
         analysisResults.set(url, result);
         resolve(result);
       }
     } catch (err) {
       // If chrome.storage access throws, fallback to direct check
       const { mixed, block, char } = hasMixedScripts(punnyDomain);
-      const result = mixed 
+      const result = mixed
         ? { safe: false, reason: 'mixed-scripts', char, block, domain: punnyDomain }
         : { safe: true, reason: 'no-mixed-scripts' };
-        
+
       if (mixed) {
         // Create alert popup for vulnerable sites
         chrome.runtime.sendMessage({
@@ -223,7 +223,7 @@ async function analyzeCurrentPage() {
           block
         });
       }
-      
+
       analysisResults.set(url, result);
       resolve(result);
     }
@@ -251,10 +251,23 @@ if (chrome.runtime && chrome.runtime.onMessage) {
           handleAnalysisRequest(_request, _sendResponse);
         }
         return true; // Keep message channel open for async response
+      } else if (_request && _request.type === 'clear-analysis-cache') {
+        // Clear cached analysis for the specified URL to force fresh analysis
+        const url = _request.url;
+        if (url && analysisResults.has(url)) {
+          analysisResults.delete(url);
+          console.log('IDN Protection: Cleared analysis cache for', url);
+        }
+        if (_sendResponse) {
+          _sendResponse({ success: true });
+        }
+        return true;
       }
     } catch (e) {
       console.error('IDN Protection: Message handler error:', e);
-      _sendResponse({ success: false, error: 'Message handler error' });
+      if (_sendResponse) {
+        _sendResponse({ success: false, error: 'Message handler error' });
+      }
     }
   });
 }
@@ -263,7 +276,7 @@ function handleAnalysisRequest(_request, _sendResponse) {
   try {
     // Return stored analysis results - DO NOT send new messages (prevents cycling)
     const url = _request.url || window.location.href;
-    
+
     if (analysisResults.has(url)) {
       // Already analyzed - just return stored result, no new messages
       const result = analysisResults.get(url);
@@ -289,7 +302,7 @@ let initialized = false;
 async function initialize() {
   if (initialized) return;
   initialized = true;
-  
+
   try {
     // Analyze current page once (creates popup windows only for threats)
     await analyzeCurrentPage();
@@ -306,7 +319,7 @@ async function initialize() {
 if (typeof document !== 'undefined') {
   // Run immediately if possible
   initialize();
-  
+
   // Also run on DOMContentLoaded as backup (but only if not already initialized)
   document.addEventListener('DOMContentLoaded', initialize);
 }

@@ -4,9 +4,20 @@
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-blue)](https://chrome.google.com/webstore)
 [![Edge Extension](https://img.shields.io/badge/edge-extension-blue)](https://microsoftedge.microsoft.com/addons)
 [![Tests](https://img.shields.io/badge/tests-100%25%20passing-brightgreen)](#testing)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](better-idn-protection/LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](#releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](better-idn-protection/docs/LICENSE)
 
 I built a little browser extension that provides protection against IDN (Internationalized Domain Name) homograph phishing attacks. This extension detects suspicious domain names that use mixed scripts and Unicode characters to impersonate legitimate websites. Use at your own risk.
+
+## 🧪 Test the Extension
+
+**Try it live**: [https://xn--christinbritton-nlb.weebly.com/](https://xn--christinbritton-nlb.weebly.com/)  
+*This test site demonstrates IDN-based attacks using mixed script characters (punycode encoding). The extension should detect and warn about this suspicious domain. Visit this site after installing the extension to see the protection in action.*
+
+**What you'll see:**
+- 🚨 Alert popup window warning about the suspicious domain
+- 🔍 Extension popup showing threat details
+- ⚡ Real-time detection without page reload needed
 
 ## 🛡️ Features
 
@@ -144,8 +155,9 @@ npm run validate
 
 ## 🤝 Contributing
 
-We welcome contributions! Please:
+We welcome contributions! Please see our [Contributing Guide](better-idn-protection/docs/CONTRIBUTING.md) for detailed information.
 
+**Quick Start**:
 1. Fork the repository
 2. Create a feature branch
 3. Make changes with tests
@@ -160,13 +172,15 @@ We welcome contributions! Please:
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the [LICENSE](better-idn-protection/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](better-idn-protection/docs/LICENSE) file for details.
 
 ## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/cbritt0n/Better-IDN-based-Attack-Protection/issues)
-- **Security Issues**: Please report privately via email
-- **Documentation**: See files in `better-idn-protection/` folder
+- **Security Issues**: See our [Security Policy](better-idn-protection/docs/SECURITY.md) for reporting guidelines
+- **Development Guide**: [Development Documentation](better-idn-protection/docs/DEVELOPMENT.md)
+- **API Reference**: [API Documentation](better-idn-protection/docs/API.md)
+- **Contributing**: [Contributing Guidelines](better-idn-protection/docs/CONTRIBUTING.md)
 
 ## 🔗 Resources
 

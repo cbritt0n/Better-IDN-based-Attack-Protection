@@ -46,7 +46,7 @@ function setStatus(text) {
 
 function processAnalysisResult(result, domain) {
   debugLog('Processing analysis result:', result);
-  
+
   if (result.safe) {
     let statusMessage = 'Domain analysis completed - appears safe.';
     if (result.reason === 'educational') {
@@ -108,16 +108,46 @@ function processAnalysisResult(result, domain) {
     if (statusCard) {
       statusCard.className = 'status-card danger';
 
-      // Update title for threat result
+      // Update title for threat result with warning icon
       const statusTitle = statusCard.querySelector('.status-title');
       if (statusTitle) {
-        statusTitle.textContent = '⚠️ Threat Detected';
+        statusTitle.textContent = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+
+        const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path1.setAttribute('d', 'M10.29 3.86L1.82 18A2 2 0 003.54 21H20.46A2 2 0 0022.18 18L13.71 3.86A2 2 0 0010.29 3.86Z');
+        path1.setAttribute('stroke', 'currentColor');
+        path1.setAttribute('stroke-width', '2');
+        path1.setAttribute('stroke-linecap', 'round');
+        path1.setAttribute('stroke-linejoin', 'round');
+
+        const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path2.setAttribute('d', 'M12 9V13');
+        path2.setAttribute('stroke', 'currentColor');
+        path2.setAttribute('stroke-width', '2');
+        path2.setAttribute('stroke-linecap', 'round');
+        path2.setAttribute('stroke-linejoin', 'round');
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '12');
+        circle.setAttribute('cy', '17');
+        circle.setAttribute('r', '1');
+        circle.setAttribute('fill', 'currentColor');
+
+        svg.appendChild(path1);
+        svg.appendChild(path2);
+        svg.appendChild(circle);
+        statusTitle.appendChild(svg);
+        statusTitle.appendChild(document.createTextNode(' Security Alert'));
       }
 
-      // Update description for threat result  
+      // Update description for threat result
       const statusDesc = statusCard.querySelector('.status-description');
       if (statusDesc) {
-        statusDesc.textContent = 'Mixed script characters may indicate phishing attempt.';
+        statusDesc.textContent = 'A suspicious URL pattern was detected that may indicate an IDN-based phishing attack.';
       }
     }
 
@@ -128,8 +158,29 @@ function processAnalysisResult(result, domain) {
 // Message listener removed - extension popup now uses direct content script communication only
 // This eliminates conflicts and duplicate messaging that caused status cycling
 
+// Helper function to force fresh analysis by clearing cached results
+function clearAnalysisCache(domain) {
+  debugLog('Clearing analysis cache for domain:', domain);
+  // Send message to content script to clear cached analysis for this domain
+  chrome.runtime.sendMessage({ type: 'get-tab-for-analysis' }, (response) => {
+    if (chrome.runtime.lastError || !response || !response.tabId) {
+      return;
+    }
+
+    chrome.tabs.sendMessage(response.tabId, {
+      type: 'clear-analysis-cache',
+      url: domain.startsWith('http') ? domain : `https://${domain}`
+    }, () => {
+      // Ignore response, this is just a cache clear
+    });
+  });
+}
+
 function triggerDomainAnalysis(domain) {
   debugLog('Triggering domain analysis for:', domain);
+
+  // Clear any cached results first to ensure fresh analysis
+  clearAnalysisCache(domain);
 
   let analysisCompleted = false;
 
@@ -143,7 +194,7 @@ function triggerDomainAnalysis(domain) {
       const statusCard = document.getElementById('warning-section');
       if (statusCard) {
         statusCard.className = 'status-card';
-        
+
         // Update title
         const statusTitle = statusCard.querySelector('.status-title');
         if (statusTitle) {
@@ -160,7 +211,7 @@ function triggerDomainAnalysis(domain) {
   }, 2000); // 2 second timeout as genuine fallback
 
   try {
-    // Ask background script for the correct tab to analyze  
+    // Ask background script for the correct tab to analyze
     chrome.runtime.sendMessage({ type: 'get-tab-for-analysis' }, (response) => {
       if (chrome.runtime.lastError || !response || !response.tabId) {
         analysisCompleted = true;
@@ -168,7 +219,7 @@ function triggerDomainAnalysis(domain) {
         setStatus('No web page available for analysis - open a website first.');
         return;
       }
-      
+
       // Use the tab ID provided by background script
       const tabId = response.tabId;
       chrome.tabs.get(tabId, (tab) => {
@@ -178,7 +229,7 @@ function triggerDomainAnalysis(domain) {
           setStatus('Unable to access tab for analysis.');
           return;
         }
-        
+
         processTabForAnalysis(tab, domain, () => {
           analysisCompleted = true;
           clearTimeout(analysisTimeout);
@@ -265,21 +316,65 @@ function setCurrentDomain(domain) {
       debugLog('ERROR: domain element not found');
     }
     updateWhitelistButtons();
-    // if whitelisted, hide the warning UI
-    isDomainWhitelisted(currentDomain, (isWL) => {
-      toggleWarning(!isWL);
-    });
 
-    // Trigger URL analysis for the current domain when popup opens
+    // Check if domain is whitelisted and handle accordingly
     if (currentDomain) {
-      triggerDomainAnalysis(currentDomain);
+      isDomainWhitelisted(currentDomain, (isWhitelisted) => {
+        if (isWhitelisted) {
+          // Domain is whitelisted - immediately show safe state without analysis
+          debugLog('Domain is whitelisted, showing safe state immediately');
+          const statusCard = document.getElementById('warning-section');
+          if (statusCard) {
+            statusCard.className = 'status-card safe';
+
+            // Update to safe icon and text
+            const statusTitle = statusCard.querySelector('.status-title');
+            if (statusTitle) {
+              statusTitle.textContent = '';
+              const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              svg.setAttribute('class', 'icon');
+              svg.setAttribute('viewBox', '0 0 24 24');
+              svg.setAttribute('fill', 'none');
+
+              const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              path1.setAttribute('d', 'M9 12L11 14L15 10');
+              path1.setAttribute('stroke', 'currentColor');
+              path1.setAttribute('stroke-width', '2');
+              path1.setAttribute('stroke-linecap', 'round');
+              path1.setAttribute('stroke-linejoin', 'round');
+
+              const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
+              path2.setAttribute('stroke', 'currentColor');
+              path2.setAttribute('stroke-width', '2');
+              path2.setAttribute('stroke-linecap', 'round');
+              path2.setAttribute('stroke-linejoin', 'round');
+
+              svg.appendChild(path1);
+              svg.appendChild(path2);
+              statusTitle.appendChild(svg);
+              statusTitle.appendChild(document.createTextNode(' Domain Trusted'));
+            }
+
+            const statusDesc = statusCard.querySelector('.status-description');
+            if (statusDesc) {
+              statusDesc.textContent = 'This domain is on your whitelist and considered safe.';
+            }
+          }
+
+          setStatus('Domain is whitelisted and considered safe.');
+        } else {
+          // Domain is not whitelisted - proceed with normal analysis
+          triggerDomainAnalysis(currentDomain);
+        }
+      });
     }
   } catch (error) {
     debugLog('Error setting current domain:', error);
   }
 }
 
-function toggleWarning(show) {
+function _toggleWarning(show) {
   debugLog('Toggling warning display:', show);
   try {
     const statusCard = document.getElementById('warning-section');
@@ -421,12 +516,52 @@ function addToWhitelist() {
       debugLog(`Adding domain to whitelist: ${toStore} (was already listed: ${wasAlreadyListed})`);
     }
     chrome.storage.sync.set({ whitelist: wl }, () => {
-      debugLog('Domain added to whitelist, updating UI');
+      debugLog('Domain added to whitelist, updating UI to safe state');
       updateWhitelistButtons();
       renderWhitelist();
-      // Also update the warning state since domain is now whitelisted
+
+      // Immediately show safe colors and content for whitelisted domain
       if (currentDomain) {
-        toggleWarning(false);
+        const statusCard = document.getElementById('warning-section');
+        if (statusCard) {
+          statusCard.className = 'status-card safe';
+
+          // Update to safe icon and text
+          const statusTitle = statusCard.querySelector('.status-title');
+          if (statusTitle) {
+            statusTitle.textContent = '';
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'icon');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+
+            const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path1.setAttribute('d', 'M9 12L11 14L15 10');
+            path1.setAttribute('stroke', 'currentColor');
+            path1.setAttribute('stroke-width', '2');
+            path1.setAttribute('stroke-linecap', 'round');
+            path1.setAttribute('stroke-linejoin', 'round');
+
+            const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
+            path2.setAttribute('stroke', 'currentColor');
+            path2.setAttribute('stroke-width', '2');
+            path2.setAttribute('stroke-linecap', 'round');
+            path2.setAttribute('stroke-linejoin', 'round');
+
+            svg.appendChild(path1);
+            svg.appendChild(path2);
+            statusTitle.appendChild(svg);
+            statusTitle.appendChild(document.createTextNode(' Domain Trusted'));
+          }
+
+          const statusDesc = statusCard.querySelector('.status-description');
+          if (statusDesc) {
+            statusDesc.textContent = 'This domain is on your whitelist and considered safe.';
+          }
+        }
+
+        setStatus('Domain added to whitelist and marked as safe.');
       }
     });
   });
@@ -445,12 +580,14 @@ function removeFromWhitelist() {
     debugLog(`Whitelist filter: before=${beforeLength}, after=${afterLength}, removed=${beforeLength - afterLength} entries`);
 
     chrome.storage.sync.set({ whitelist: wl }, () => {
-      debugLog('Domain removed from whitelist, updating UI');
+      debugLog('Domain removed from whitelist, updating UI and re-analyzing');
       updateWhitelistButtons();
       renderWhitelist();
-      // Also update the warning state since domain is no longer whitelisted
+
+      // Re-analyze the domain to check if it's actually vulnerable
+      // This will show the red threat colors if the domain has mixed scripts
       if (currentDomain) {
-        toggleWarning(true);
+        triggerDomainAnalysis(currentDomain);
       }
     });
   });
@@ -605,7 +742,8 @@ function renderWhitelist() {
                     (domain === currentDomain ||
                      domain === ((typeof punycode !== 'undefined') ? punycode.ToASCII(currentDomain) : currentDomain) ||
                      domain === ((typeof punycode !== 'undefined') ? punycode.ToUnicode(currentDomain) : currentDomain))) {
-                  toggleWarning(true);
+                  // Re-analyze to show proper threat colors if domain is vulnerable
+                  triggerDomainAnalysis(currentDomain);
                 }
               });
             });
@@ -720,16 +858,16 @@ function fallbackToTabQuery() {
           setCurrentDomain('Unable to detect domain');
           return;
         }
-        
+
         if (tabs && tabs.length) {
           // Filter for web pages (HTTP/HTTPS) and sort by last accessed
-          const webTabs = tabs.filter(t => 
-            t && t.url && 
+          const webTabs = tabs.filter(t =>
+            t && t.url &&
             (t.url.startsWith('http://') || t.url.startsWith('https://')) &&
             !t.url.startsWith('chrome-extension:') &&
             !t.url.startsWith('moz-extension:')
           ).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-          
+
           if (webTabs.length > 0) {
             try {
               const u = new URL(webTabs[0].url);
@@ -786,12 +924,14 @@ document.addEventListener('DOMContentLoaded', () => {
       clearBtn.addEventListener('click', () => {
         debugLog('Clearing whitelist');
         chrome.storage.sync.set({ whitelist: [] }, () => {
-          debugLog('Whitelist cleared, updating UI');
+          debugLog('Whitelist cleared, updating UI and re-analyzing current domain');
           renderWhitelist();
           updateWhitelistButtons();
-          // Also update the warning state since domain is no longer whitelisted
+
+          // Re-analyze the current domain to show proper threat colors if it's vulnerable
+          // This ensures the domain shows red if it has mixed scripts after being removed from whitelist
           if (currentDomain) {
-            toggleWarning(true);
+            triggerDomainAnalysis(currentDomain);
           }
         });
       });
