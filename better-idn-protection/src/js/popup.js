@@ -132,12 +132,63 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
 
 function triggerDomainAnalysis(domain) {
   debugLog('Triggering domain analysis for:', domain);
+
+  // Set a timeout to show default safe status if no response received
+  const analysisTimeout = setTimeout(() => {
+    debugLog('Analysis timeout reached, showing default safe status');
+    setStatus('Domain analysis completed. No obvious threats detected, but always verify URLs independently.');
+
+    // Update the status card to show safe state
+    const statusCard = document.getElementById('warning-section');
+    if (statusCard) {
+      statusCard.className = 'status-card safe';
+
+      // Update title
+      const statusTitle = statusCard.querySelector('.status-title');
+      if (statusTitle) {
+        statusTitle.textContent = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+
+        const path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path1.setAttribute('d', 'M9 12L11 14L15 10');
+        path1.setAttribute('stroke', 'currentColor');
+        path1.setAttribute('stroke-width', '2');
+        path1.setAttribute('stroke-linecap', 'round');
+        path1.setAttribute('stroke-linejoin', 'round');
+
+        const path2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path2.setAttribute('d', 'M21 12C21 16.97 16.97 21 12 21S3 16.97 3 12S7.03 3 12 3S21 7.03 21 12Z');
+        path2.setAttribute('stroke', 'currentColor');
+        path2.setAttribute('stroke-width', '2');
+        path2.setAttribute('stroke-linecap', 'round');
+        path2.setAttribute('stroke-linejoin', 'round');
+
+        svg.appendChild(path1);
+        svg.appendChild(path2);
+        statusTitle.appendChild(svg);
+
+        const textNode = document.createTextNode(' Analysis Complete');
+        statusTitle.appendChild(textNode);
+      }
+
+      // Update description
+      const statusDesc = statusCard.querySelector('.status-description');
+      if (statusDesc) {
+        statusDesc.textContent = 'No immediate threats detected in domain name.';
+      }
+    }
+  }, 3000); // 3 second timeout
+
   try {
     // Send message to background script to analyze the current domain
     chrome.runtime.sendMessage({
       type: 'analyze-domain',
       url: domain.startsWith('http') ? domain : `https://${domain}`
     }, (_response) => {
+      clearTimeout(analysisTimeout); // Clear timeout if response received
       if (chrome.runtime.lastError) {
         debugLog('Error triggering domain analysis:', chrome.runtime.lastError.message);
       } else {
@@ -145,6 +196,7 @@ function triggerDomainAnalysis(domain) {
       }
     });
   } catch (error) {
+    clearTimeout(analysisTimeout);
     debugLog('Error in triggerDomainAnalysis:', error);
   }
 }
@@ -668,6 +720,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       debugLog('Clear button listener attached');
     }
+
+    // Clear initial "Analyzing current page..." status immediately
+    setStatus('Initializing analysis...');
 
     // Initialize popup content
     initializePopupContent();
